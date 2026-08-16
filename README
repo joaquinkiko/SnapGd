@@ -1,0 +1,33 @@
+# SnapGd
+
+**Snapshot based multiplayer synchronization for [Godot 4](https://godotengine.org/)**
+
+[![Godot](https://img.shields.io/badge/Godot-4.6%2B-478cbf?logo=godot-engine&logoColor=white)](https://godotengine.org/download)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/status-WIP-orange)](#install)
+
+SnapGd is a networking addon for handling smooth gameplay and synchronization for fast-paced multiplayer.
+
+## Goals
+
+- **Time synchronization** between players
+- **Client prediction and Server reconciliation** for responsive gameplay
+- **Interpolation** for smooth synchronization regardless of ping
+- **Delta-compression** for low bandwidth cost
+- **Lag compensation** for fast-paced gameplay
+
+## Install
+ 
+After adding the latest [Release](../../releases/latest) to your project, enable the addon in your project settings.
+ 
+> **Note:** SnapGd is still in early development (WIP). APIs and features may change before a stable release.
+
+## License
+ 
+This project is licensed under the [MIT License](LICENSE).
+
+## Support
+
+If you enjoy this project, consider supporting development:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/joaquinkiko)
