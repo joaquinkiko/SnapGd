@@ -1,0 +1,92 @@
+[gd_scene format=3 uid="uid://bl26ui1cjjd2q"]
+
+[ext_resource type="Script" uid="uid://bvnj7jtn04e67" path="res://demo/scripts/demo.gd" id="1_vklfa"]
+[ext_resource type="PackedScene" uid="uid://cbqg1ll05fwko" path="res://demo/scenes/world.tscn" id="2_dar0o"]
+[ext_resource type="PackedScene" uid="uid://denicwshlb62b" path="res://demo/scenes/player.tscn" id="3_j5lb4"]
+
+[node name="Main" type="CanvasLayer" unique_id=283530553]
+script = ExtResource("1_vklfa")
+world = ExtResource("2_dar0o")
+player = ExtResource("3_j5lb4")
+
+[node name="Background" type="ColorRect" parent="." unique_id=571918012]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.17774662, 0.29888493, 0.5302173, 1)
+
+[node name="Title" type="Label" parent="Background" unique_id=1160296016]
+custom_minimum_size = Vector2(0, 128)
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -55.0
+offset_right = 55.0
+offset_bottom = 23.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 32
+text = "SnapGd Demo"
+vertical_alignment = 2
+
+[node name="Credit" type="Label" parent="Background" unique_id=1467404388]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -55.0
+offset_top = -128.0
+offset_right = 55.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "Created by:
+Joaquin Cuellar"
+horizontal_alignment = 1
+
+[node name="Menu" type="VBoxContainer" parent="." unique_id=557890789]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -22.0
+offset_top = -15.5
+offset_right = 22.0
+offset_bottom = 15.5
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="IP" type="TextEdit" parent="Menu" unique_id=1782774678]
+custom_minimum_size = Vector2(156, 32)
+layout_mode = 2
+placeholder_text = "127.0.0.1:42069"
+
+[node name="Host" type="Button" parent="Menu" unique_id=1905937187]
+layout_mode = 2
+text = "Host"
+
+[node name="Join" type="Button" parent="Menu" unique_id=1539800552]
+layout_mode = 2
+text = "Join"
+
+[node name="Offline" type="Button" parent="Menu" unique_id=602435625]
+layout_mode = 2
+text = "Offline"
+
+[node name="Exit" type="Button" parent="Menu" unique_id=759486320]
+layout_mode = 2
+text = "Exit"
+
+[node name="Spawner" type="MultiplayerSpawner" parent="." unique_id=1443458865]
+_spawnable_scenes = PackedStringArray("uid://cbqg1ll05fwko", "uid://denicwshlb62b")
+spawn_path = NodePath(".")
+
+[connection signal="text_changed" from="Menu/IP" to="." method="_on_ip_text_changed"]
+[connection signal="pressed" from="Menu/Host" to="." method="_on_host_pressed"]
+[connection signal="pressed" from="Menu/Join" to="." method="_on_join_pressed"]
+[connection signal="pressed" from="Menu/Offline" to="." method="_on_offline_pressed"]
+[connection signal="pressed" from="Menu/Exit" to="." method="_on_exit_pressed"]

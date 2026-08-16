@@ -1,0 +1,201 @@
+[gd_scene format=3 uid="uid://cbqg1ll05fwko"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7xqun"]
+albedo_color = Color(0.55728406, 0.5786692, 0.3564273, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_eb4ro"]
+material = SubResource("StandardMaterial3D_7xqun")
+size = Vector3(50, 1, 50)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_rhk3n"]
+size = Vector3(50, 1, 50)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hjg4b"]
+albedo_color = Color(0.7176471, 0.23529412, 0.26666668, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_hjg4b"]
+material = SubResource("StandardMaterial3D_hjg4b")
+size = Vector3(50, 5, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_j2ryg"]
+size = Vector3(50, 5, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_j2ryg"]
+albedo_color = Color(0.4392157, 0.4862745, 0.62352943, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_7xqun"]
+material = SubResource("StandardMaterial3D_j2ryg")
+size = Vector3(5, 1, 5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_hjg4b"]
+size = Vector3(5, 1, 5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_p4g8e"]
+albedo_color = Color(0.29206863, 0.24443847, 0.3596834, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_j2ryg"]
+material = SubResource("StandardMaterial3D_p4g8e")
+size = Vector3(5, 2, 5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_p4g8e"]
+size = Vector3(5, 2, 5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_q8xsj"]
+albedo_color = Color(0.64705884, 0.8039216, 0.79607844, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_q8xsj"]
+material = SubResource("StandardMaterial3D_q8xsj")
+size = Vector3(5, 4, 5)
+
+[sub_resource type="Environment" id="Environment_j2ryg"]
+background_mode = 1
+background_color = Color(0.7265259, 0.82051116, 1, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.43852192, 0.67183393, 0.73751897, 1)
+ambient_light_energy = 0.3
+fog_enabled = true
+fog_mode = 1
+fog_light_color = Color(0.8180581, 0.8365034, 0.8652066, 1)
+fog_density = 1.0
+fog_sky_affect = 0.0
+fog_depth_begin = 0.0
+fog_depth_end = 250.0
+
+[node name="3dWorld" type="Node3D" unique_id=1872647857]
+
+[node name="Enviroment" type="Node3D" parent="." unique_id=1009035494]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, -25, 3, 0)
+
+[node name="Floor" type="StaticBody3D" parent="Enviroment" unique_id=1509420339]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -1.0927847e-06, -3, 25)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Floor" unique_id=1847322838]
+mesh = SubResource("BoxMesh_eb4ro")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Floor" unique_id=1258340899]
+shape = SubResource("BoxShape3D_rhk3n")
+
+[node name="Wall" type="StaticBody3D" parent="Enviroment" unique_id=967746513]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -25.000002, 0, 24.999998)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Wall" unique_id=1355562479]
+mesh = SubResource("BoxMesh_hjg4b")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Wall" unique_id=1544534258]
+shape = SubResource("BoxShape3D_j2ryg")
+
+[node name="Wall2" type="StaticBody3D" parent="Enviroment" unique_id=1146556481]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 24.999998, 0, 25.000002)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Wall2" unique_id=225365100]
+mesh = SubResource("BoxMesh_hjg4b")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Wall2" unique_id=397084123]
+shape = SubResource("BoxShape3D_j2ryg")
+
+[node name="Wall3" type="StaticBody3D" parent="Enviroment" unique_id=1775370383]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.1855694e-06, 0, 50)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Wall3" unique_id=583577610]
+mesh = SubResource("BoxMesh_hjg4b")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Wall3" unique_id=2023329560]
+shape = SubResource("BoxShape3D_j2ryg")
+
+[node name="Wall4" type="StaticBody3D" parent="Enviroment" unique_id=1044659660]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Wall4" unique_id=901421980]
+mesh = SubResource("BoxMesh_hjg4b")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Wall4" unique_id=1236237755]
+shape = SubResource("BoxShape3D_j2ryg")
+
+[node name="Platform" type="StaticBody3D" parent="Enviroment" unique_id=555928641]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9.999999, -2, 15)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Platform" unique_id=388108826]
+mesh = SubResource("BoxMesh_7xqun")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Platform" unique_id=2116015143]
+shape = SubResource("BoxShape3D_hjg4b")
+
+[node name="Platform2" type="StaticBody3D" parent="Enviroment" unique_id=515702859]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -10.000001, -2, 35)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Platform2" unique_id=141824160]
+mesh = SubResource("BoxMesh_7xqun")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Platform2" unique_id=1109733171]
+shape = SubResource("BoxShape3D_hjg4b")
+
+[node name="Platform3" type="StaticBody3D" parent="Enviroment" unique_id=1639870735]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9.999999, -2, 35)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Platform3" unique_id=2041117383]
+mesh = SubResource("BoxMesh_7xqun")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Platform3" unique_id=1138284063]
+shape = SubResource("BoxShape3D_hjg4b")
+
+[node name="Platform4" type="StaticBody3D" parent="Enviroment" unique_id=1244023852]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -10.000001, -2, 15)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Platform4" unique_id=1940630812]
+mesh = SubResource("BoxMesh_7xqun")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Platform4" unique_id=902385970]
+shape = SubResource("BoxShape3D_hjg4b")
+
+[node name="Platform5" type="StaticBody3D" parent="Enviroment" unique_id=1346443090]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 15, -1.5, 10.000001)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Platform5" unique_id=1018653824]
+mesh = SubResource("BoxMesh_j2ryg")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Platform5" unique_id=1810795481]
+shape = SubResource("BoxShape3D_p4g8e")
+
+[node name="Platform6" type="StaticBody3D" parent="Enviroment" unique_id=34404296]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -15.000002, -1.5, 40)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Platform6" unique_id=996628791]
+mesh = SubResource("BoxMesh_j2ryg")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Platform6" unique_id=889659438]
+shape = SubResource("BoxShape3D_p4g8e")
+
+[node name="Platform7" type="StaticBody3D" parent="Enviroment" unique_id=809306893]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 14.999998, -1.5, 40)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Platform7" unique_id=527152096]
+mesh = SubResource("BoxMesh_j2ryg")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Platform7" unique_id=875748984]
+shape = SubResource("BoxShape3D_p4g8e")
+
+[node name="Platform8" type="StaticBody3D" parent="Enviroment" unique_id=31830242]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -15, -1.5, 9.999999)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Platform8" unique_id=1098864320]
+mesh = SubResource("BoxMesh_j2ryg")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Platform8" unique_id=641245181]
+shape = SubResource("BoxShape3D_p4g8e")
+
+[node name="Platform9" type="StaticBody3D" parent="Enviroment" unique_id=1185236441]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -1.0927847e-06, -0.5, 25)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enviroment/Platform9" unique_id=313609237]
+mesh = SubResource("BoxMesh_q8xsj")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enviroment/Platform9" unique_id=1707629821]
+shape = SubResource("BoxShape3D_hjg4b")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1536917674]
+transform = Transform3D(0.88250476, 0.34420443, -0.320482, 0, 0.68143654, 0.7318772, 0.4703035, -0.6458851, 0.601371, 0, 0, 0)
+light_color = Color(1, 1, 0.6784314, 1)
+light_bake_mode = 1
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=504797362]
+environment = SubResource("Environment_j2ryg")
