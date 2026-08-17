@@ -216,6 +216,10 @@ func _on_server_tick(delta: float) -> void:
 			# Pop command from front of queue
 			var command: SnapCommand = _pending_commands.get(peer, []).pop_front()
 			# Simulate this peer's world
+			for node in _net_nodes: # All NetNodes NOT owned by self
+				if is_instance_valid(node) and node.is_multiplayer_authority():
+					continue
+				node.apply_command(command)
 			simulate_command.emit(command)
 			# Update latest command processed for peer
 			_last_command_sequence[peer] = command.sequence
