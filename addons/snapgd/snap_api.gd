@@ -1,6 +1,9 @@
 ## Global API for SnapGd
 extends Node
 
+## TODO: Settings for tick-rate  (30-128hz), max ticks per frame, and snapshot-rate(10-30hz)
+## TODO: Settings for interpolation-delay (50-150ms), reconciliation threshold, max-rewind (200-300ms)
+
 ## Sequence buffer size for outbound packets
 const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
@@ -127,3 +130,7 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 	elif error > _EPSILON:
 		pass
 		# TODO: offset rendering, but NOT simulation
+
+## TODO: Add interpolation handling
+
+## TODO: Add delta compression handling
