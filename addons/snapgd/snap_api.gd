@@ -45,6 +45,9 @@ var _last_command_sequence: Dictionary[int, int]
 ## Latest snapshot received, waiting to be reconciled on the next tick.
 var _pending_snapshot: Snapshot
 
+## All registered [NetNode]s to be handled.
+var _net_nodes: Array[NetNode]
+
 ## Leftover visual-only properties after soft correction.
 ## Decays toward empty every client tick.
 var _render_offsets: Dictionary[StringName, Variant]
@@ -92,9 +95,7 @@ func _process_ticks() -> void:
 		_usec_accumulator -= _usecs_per_tick
 		current_tick += 1
 		if multiplayer.is_server():
-			## TODO: check for new packets to apply / update acks
 			_on_server_tick(_tick_rate)
-			## TODO: store snapshot history
 		else:
 			_on_client_tick(_tick_rate)
 			if _pending_snapshot:
@@ -140,8 +141,6 @@ func _on_server_tick(delta: float) -> void:
 		_last_command_sequence[peer] = command.sequence
 	
 	simulate_world.emit(delta)
-	
-	current_tick += 1
 	
 	if current_tick % ticks_per_snapshot == 0:
 		for peer in multiplayer.get_peers():
@@ -211,10 +210,30 @@ func _simulate_command(command: SnapCommand) -> void:
 		node.apply_command(command)
 	simulate_command.emit(command)
 
+## [NetNode]s owned by self.
 func _owned_net_nodes() -> Array[NetNode]:
 	var result: Array[NetNode] = []
-	# TODO: get list of owned net nodes
+	for node in _net_nodes:
+		if is_instance_valid(node) and node.is_multiplayer_authority():
+			result.append(node)
 	return result
+
+## [NetNode]s owned by [param peer].
+func _peer_net_nodes(peer: int) -> Array[NetNode]:
+	var result: Array[NetNode] = []
+	for node in _net_nodes:
+		if is_instance_valid(node) and node.get_multiplayer_authority() == peer:
+			result.append(node)
+	return result
+
+## Registers [param node] for handling. Typically called when it enters tree.
+func register_net_node(node: NetNode) -> void:
+	if !_net_nodes.has(node):
+		_net_nodes.append(node)
+
+## Unregisters [param node] from handling. Typically called when it exits tree.
+func unregister_net_node(node: NetNode) -> void:
+	_net_nodes.erase(node)
 
 ## Blends [member render_offsets] toward zero every client tick.
 func _decay_render_offsets(delta: float) -> void:
