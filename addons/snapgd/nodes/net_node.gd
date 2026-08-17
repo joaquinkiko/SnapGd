@@ -31,5 +31,8 @@ func apply_state(state: SnapState) -> void:
 		if state.data.has(key):
 			set_indexed(prop, state.data[key])
 
+func get_render_offset(prop: String) -> Variant:
+	return SnapAPI.render_offsets.get(_key(prop))
+
 func _key(prop: String) -> StringName:
 	return StringName("%s:%s" % [get_path(), prop])
