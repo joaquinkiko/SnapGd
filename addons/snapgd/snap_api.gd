@@ -167,8 +167,6 @@ func _process_ticks() -> void:
 		_current_tick += 1
 		if multiplayer.is_server():
 			_on_server_tick(_tick_delta)
-			if is_client_server:
-				_on_client_tick(_tick_delta)
 		else:
 			_on_client_tick(_tick_delta)
 			if _pending_snapshot:
@@ -193,20 +191,12 @@ func _on_client_tick(delta: float) -> void:
 	# Store command in buffer
 	_command_history[command.sequence & _SEQ_BUFFER_MASK] = command
 	# Send to server (unreliable)
-	if multiplayer.is_server():
-		_receive_command(
-			command.sequence,
-			command.tick,
-			command.delta_time,
-			command.data
-		)
-	else:
-		_receive_command.rpc_id(1,
-			command.sequence,
-			command.tick,
-			command.delta_time,
-			command.data
-		)
+	_receive_command.rpc_id(1,
+		command.sequence,
+		command.tick,
+		command.delta_time,
+		command.data
+	)
 	# Predict command
 	_simulate_command(command)
 	# Store in state history
@@ -227,7 +217,17 @@ func _on_server_tick(delta: float) -> void:
 			simulate_command.emit(command)
 			# Update latest command processed for peer
 			_last_command_sequence[peer] = command.sequence
-	
+	# Client-Server simulates their own commands
+	if is_client_server:
+		var command := SnapCommand.new()
+		command.sequence = _command_sequence
+		command.tick = _current_tick
+		command.delta_time = _tick_delta
+		sample_input.emit(command)
+		for node in _owned_net_nodes():
+			node.capture_command(command)
+		_simulate_command(command)
+				
 	simulate_world.emit(delta)
 	
 	if _current_tick % _ticks_per_snapshot == 0:
@@ -333,7 +333,7 @@ func unregister_net_node(node: NetNode) -> void:
 
 ## Prep for sending over RPC. Each entry is Array of [sequence: int, data: Dictionary].
 func _states_to_array(states: Array[SnapState]) -> Array[Array]:
-	var out: Array = []
+	var out: Array[Array] = []
 	for state in states:
 		out.append([state.sequence, state.data])
 	return out
