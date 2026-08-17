@@ -208,14 +208,14 @@ func _on_client_tick(delta: float) -> void:
 func _on_server_tick(delta: float) -> void:
 	# Simulate all commands...
 	for peer in multiplayer.get_peers():
-		# Pop command from front of queue
-		var command: SnapCommand = _pending_commands.get(peer, []).pop_front()
-		if command == null:
-			continue # No comman arrived
-		# Simulate this peer's world
-		simulate_command.emit(command)
-		# Update latest command processed for peer
-		_last_command_sequence[peer] = command.sequence
+		var queue: Array = _pending_commands.get(peer, [])
+		while !queue.is_empty():
+			# Pop command from front of queue
+			var command: SnapCommand = _pending_commands.get(peer, []).pop_front()
+			# Simulate this peer's world
+			simulate_command.emit(command)
+			# Update latest command processed for peer
+			_last_command_sequence[peer] = command.sequence
 	
 	simulate_world.emit(delta)
 	
