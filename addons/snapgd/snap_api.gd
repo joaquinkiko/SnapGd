@@ -164,7 +164,12 @@ func _build_snapshot(peer: int) -> Snapshot:
 	var snapshot := Snapshot.new()
 	snapshot.server_tick = current_tick
 	snapshot.last_command_sequence = _last_command_sequence[peer]
-	# TODO: Record snapshot data
+	var state := SnapState.new()
+	state.sequence = snapshot.last_command_sequence
+	for node in _net_nodes:
+		if is_instance_valid(node):
+			node.capture_state(state)
+	snapshot.states.append(state)
 	return snapshot
 
 func _on_snapshot_received(snapshot: Snapshot) -> void:
