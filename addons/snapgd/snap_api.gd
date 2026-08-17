@@ -76,6 +76,7 @@ func _handle_time(delta) -> void:
 ## determine if new ticks should be processed
 func _process_ticks() -> void:
 	if _usec_accumulator < _usecs_per_tick: return # Ignore if no ticks queued
+	var tick_delta: float = _usecs_per_tick / 1e6 # convert mircoseconds to seconds
 	pre_tick_loop.emit()
 	for t in mini(_usec_accumulator / _usecs_per_tick, _MAX_TICKS_PER_FRAME):
 		pre_tick.emit(current_tick)
