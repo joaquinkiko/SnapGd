@@ -99,10 +99,8 @@ var snapshot_rate: float:
 	get:
 		return _tick_rate / float(maxi(1, _ticks_per_snapshot))
 	set(value):
-		_ticks_per_snapshot = clampi(
-			roundi(_tick_rate / maxf(1.0, value)),
-			_MIN_SNAPSHOT_RATE, _MAX_SNAPSHOT_RATE
-		)
+		var rate := clampf(value, _MIN_SNAPSHOT_RATE, _MAX_SNAPSHOT_RATE)
+		_ticks_per_snapshot = maxi(1, roundi(_tick_rate / maxf(1.0, rate)))
 var _ticks_per_snapshot: int = roundi(
 	1e6 / ceili(1e6 / _DEFAULT_TICK_RATE) #_tick_rate
 	/ maxf(1.0, _DEFAULT_SNAPSHOT_RATE)
@@ -120,7 +118,8 @@ var _tick_rate: float:
 	get:
 		return 1e6 / float(maxi(1, _usecs_per_tick))
 	set(value):
-		_usecs_per_tick = clampi(ceili(1e6 / float(value)), _MIN_TICK_RATE, _MAX_TICK_RATE)
+		var rate := clampf(value, _MIN_TICK_RATE, _MAX_TICK_RATE)
+		_usecs_per_tick = maxi(1, ceili(1e6 / rate))
 		_tick_delta = _usecs_per_tick / 1e6
 
 # Time calculation data
