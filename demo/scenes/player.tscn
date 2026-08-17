@@ -60,7 +60,7 @@ bones/24/rotation = Quaternion(6.345524e-08, 0.9807643, -0.19519578, -1.8277877e
 script = ExtResource("3_m7rvx")
 root = NodePath("..")
 command_properties = PackedStringArray(".:camera_yaw", ".:camera_pitch", ".:should_jump", ".:input_dir")
-state_properties = PackedStringArray(":position")
+state_properties = PackedStringArray(".:position")
 metadata/_custom_type_script = "uid://bp3yrvsyrbven"
 
 [editable path="3DGodotRobot"]
