@@ -169,7 +169,7 @@ func _process_ticks() -> void:
 			_on_server_tick(_tick_delta)
 		elif multiplayer.multiplayer_peer is OfflineMultiplayerPeer || multiplayer.multiplayer_peer == null:
 			_on_offline_tick(_tick_delta)
-		else:
+		elif multiplayer.get_peers().has(1):
 			_on_client_tick(_tick_delta)
 			if _pending_snapshot:
 				_on_snapshot_received(_pending_snapshot)
