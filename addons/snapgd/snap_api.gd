@@ -167,6 +167,8 @@ func _process_ticks() -> void:
 		_current_tick += 1
 		if multiplayer.is_server():
 			_on_server_tick(_tick_delta)
+		elif multiplayer.multiplayer_peer is OfflineMultiplayerPeer || multiplayer.multiplayer_peer == null:
+			_on_offline_tick(_tick_delta)
 		else:
 			_on_client_tick(_tick_delta)
 			if _pending_snapshot:
@@ -241,6 +243,19 @@ func _on_server_tick(delta: float) -> void:
 				snapshot.last_command_sequence,
 				_states_to_array(snapshot.states)
 			)
+
+func _on_offline_tick(delta: float) -> void:
+	# Simulate local commands
+	var command := SnapCommand.new()
+	command.sequence = _command_sequence
+	command.tick = _current_tick
+	command.delta_time = _tick_delta
+	sample_input.emit(command)
+	for node in _owned_net_nodes():
+		node.capture_command(command)
+	_simulate_command(command)
+	
+	simulate_world.emit(delta)
 
 func _build_snapshot(peer: int) -> Snapshot:
 	var snapshot := Snapshot.new()
