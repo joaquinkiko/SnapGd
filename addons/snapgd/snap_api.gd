@@ -8,8 +8,10 @@ extends Node
 const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
 
-const _ERROR_THRESHOLD := 1.0
-const _EPSILON := 8.854 * 10e12
+## Prediction errors beyond this should be hard-snapped
+const _RECONCILIATION_THRESHOLD := 1.0
+## Prediction errors below this should be ignored (assume floating point noise)
+const _RECONCILIATION_EPSILON := 0.001
 
 const _MAX_TICKS_PER_FRAME := 8
 
@@ -42,6 +44,10 @@ var _last_command_sequence: Dictionary[int, int]
 
 ## Latest snapshot received, waiting to be reconciled on the next tick.
 var _pending_snapshot: Snapshot
+
+## Leftover visual-only properties after soft correction.
+## Decays toward empty every client tick.
+var _render_offsets: Dictionary[StringName, Variant]
 
 var ticks_per_snapshot: int
 
@@ -94,7 +100,7 @@ func _process_ticks() -> void:
 			if _pending_snapshot:
 				_on_snapshot_received(_pending_snapshot)
 				_pending_snapshot = null
-			## TODO: blend reconciled-packets
+			_decay_render_offsets(tick_delta)
 		post_tick.emit(current_tick)
 	post_tick_loop.emit()
 
@@ -178,12 +184,15 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 			node.capture_state(state)
 		_state_history[seq & _SEQ_BUFFER_MASK] = state
 	
-	if error > _ERROR_THRESHOLD:
-		pass
-		# TODO: hard snap
-	elif error > _EPSILON:
-		pass
-		# TODO: offset rendering, but NOT simulation
+	if error > _RECONCILIATION_THRESHOLD:
+		# Large error, should be snapped to correction
+		_render_offsets.clear()
+	elif error > _RECONCILIATION_EPSILON:
+		# Small error, can be blended over multiple ticks
+		if predicted_state:
+			for key in authoritative_state.data:
+				if predicted_state.data.has(key):
+					_render_offsets[key] = _variant_subtract(predicted_state.data[key], authoritative_state.data[key])
 
 ## TODO: Add interpolation handling
 
@@ -200,6 +209,29 @@ func _owned_net_nodes() -> Array[NetNode]:
 	# TODO: get list of owned net nodes
 	return result
 
+## Blends [member render_offsets] toward zero every client tick.
+func _decay_render_offsets(delta: float) -> void:
+	if _render_offsets.is_empty():
+		return
+	var decay: float = clampf(delta / 0.15, 0.0, 1.0)
+	for key in _render_offsets.keys():
+		var offset: Variant = _render_offsets[key]
+		match typeof(offset):
+			TYPE_FLOAT, TYPE_INT, TYPE_VECTOR2, TYPE_VECTOR3:
+				offset = offset * (1.0 - decay)
+				if _variant_distance(offset, _variant_zero(offset)) <= _RECONCILIATION_EPSILON:
+					_render_offsets.erase(key)
+				else:
+					_render_offsets[key] = offset
+			_:
+				_render_offsets.erase(key) # not a smoothable type
+
+func _variant_zero(sample: Variant) -> Variant:
+	match typeof(sample):
+		TYPE_VECTOR2: return Vector2.ZERO
+		TYPE_VECTOR3: return Vector3.ZERO
+		_: return 0.0
+
 func _variant_distance(a: Variant, b: Variant) -> float:
 	match typeof(a):
 		TYPE_FLOAT, TYPE_INT:
@@ -210,3 +242,10 @@ func _variant_distance(a: Variant, b: Variant) -> float:
 			return (a as Vector3).distance_to(b)
 		_:
 			return 0.0 if a == b else INF
+
+func _variant_subtract(a: Variant, b: Variant) -> Variant:
+	match typeof(a):
+		TYPE_FLOAT, TYPE_INT, TYPE_VECTOR2, TYPE_VECTOR3:
+			return a - b
+		_:
+			return null
