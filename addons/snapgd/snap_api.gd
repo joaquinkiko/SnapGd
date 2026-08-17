@@ -40,6 +40,9 @@ var _state_history: Array[SnapState]
 var _pending_commands: Dictionary[int, Array]
 var _last_command_sequence: Dictionary[int, int]
 
+## Latest snapshot received, waiting to be reconciled on the next tick.
+var _pending_snapshot: Snapshot
+
 var ticks_per_snapshot: int
 
 var current_tick: int
@@ -88,7 +91,9 @@ func _process_ticks() -> void:
 			## TODO: store snapshot history
 		else:
 			_on_client_tick(_tick_rate)
-			## TODO: check for new packets to reconicle/interpolate
+			if _pending_snapshot:
+				_on_snapshot_received(_pending_snapshot)
+				_pending_snapshot = null
 			## TODO: blend reconciled-packets
 		post_tick.emit(current_tick)
 	post_tick_loop.emit()
@@ -138,17 +143,40 @@ func _build_snapshot(peer: int) -> Snapshot:
 	return snapshot
 
 func _on_snapshot_received(snapshot: Snapshot) -> void:
-	# TODO: discard history up to last processed sequence
+	if snapshot.states.is_empty():
+		return
+	var authoritative_state: SnapState = snapshot.states.back()
+	var acked_sequence: int = snapshot.last_command_sequence
+	# Discard history up to last processed sequence to avoid stale reads
+	if acked_sequence >= 0:
+		var acked_slot := acked_sequence & _SEQ_BUFFER_MASK
+		if _command_history[acked_slot] != null and _command_history[acked_slot].sequence <= acked_sequence:
+			_command_history[acked_slot] = null
+	# Measure error as distance between prediction and server authority
+	var predicted_state: SnapState = _state_history[acked_sequence & _SEQ_BUFFER_MASK]
+	if predicted_state == null || predicted_state.sequence != acked_sequence:
+		predicted_state = null
+	var error := 0.0
+	if predicted_state:
+		for key in authoritative_state.data:
+			if predicted_state.data.has(key):
+				error = maxf(error, _variant_distance(predicted_state.data[key], authoritative_state.data[key]))
 	
-	var error: float
-	# TODO: Measure error distance
+	# Rewind nodes to authoritative state...
+	for node in _owned_net_nodes():
+		node.apply_state(authoritative_state)
 	
-	# TODO: rewind
-	
-	for command in _command_history:
-		pass
-		# TODO: simulate state
-		# TODO: update state history
+	# ...replay every command since, to catch up to present
+	for seq in range(acked_sequence + 1, _command_sequence + 1):
+		var command: SnapCommand = _command_history[seq & _SEQ_BUFFER_MASK]
+		if command == null || command.sequence != seq:
+			continue # fell out of buffer or was never sent
+		_simulate_command(command)
+		var state := SnapState.new()
+		state.sequence = seq
+		for node in _owned_net_nodes():
+			node.capture_state(state)
+		_state_history[seq & _SEQ_BUFFER_MASK] = state
 	
 	if error > _ERROR_THRESHOLD:
 		pass
@@ -160,3 +188,25 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 ## TODO: Add interpolation handling
 
 ## TODO: Add delta compression handling
+
+## Runs [param command] against every locally-owned [NetNode].
+func _simulate_command(command: SnapCommand) -> void:
+	for node in _owned_net_nodes():
+		node.apply_command(command)
+	simulate_command.emit(command)
+
+func _owned_net_nodes() -> Array[NetNode]:
+	var result: Array[NetNode] = []
+	# TODO: get list of owned net nodes
+	return result
+
+func _variant_distance(a: Variant, b: Variant) -> float:
+	match typeof(a):
+		TYPE_FLOAT, TYPE_INT:
+			return absf(float(a) - float(b))
+		TYPE_VECTOR2:
+			return (a as Vector2).distance_to(b)
+		TYPE_VECTOR3:
+			return (a as Vector3).distance_to(b)
+		_:
+			return 0.0 if a == b else INF
