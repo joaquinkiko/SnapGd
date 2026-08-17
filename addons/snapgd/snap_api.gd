@@ -5,6 +5,9 @@ extends Node
 const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
 
+const _ERROR_THRESHOLD := 1.0
+const _EPSILON := 8.854 * 10e12
+
 var _command_sequence: int
 var _command_history: Array[SnapCommand]
 var _state_history: Array[SnapState]
@@ -55,3 +58,23 @@ func _build_snapshot(peer: int) -> Snapshot:
 	snapshot.last_command_sequence = _last_command_sequence[peer]
 	# TODO: Record snapshot data
 	return snapshot
+
+func _on_snapshot_received(snapshot: Snapshot) -> void:
+	# TODO: discard history up to last processed sequence
+	
+	var error: float
+	# TODO: Measure error distance
+	
+	# TODO: rewind
+	
+	for command in _command_history:
+		pass
+		# TODO: simulate state
+		# TODO: update state history
+	
+	if error > _ERROR_THRESHOLD:
+		pass
+		# TODO: hard snap
+	elif error > _EPSILON:
+		pass
+		# TODO: offset rendering, but NOT simulation
