@@ -397,7 +397,6 @@ func _variant_subtract(a: Variant, b: Variant) -> Variant:
 @rpc("any_peer", "unreliable_ordered", "call_remote")
 func _receive_command(sequence: int, tick: int, delta_time: float, data: Dictionary) -> void:
 	if not multiplayer.is_server(): return # Only peer -> server
-	print(data)
 	var peer := multiplayer.get_remote_sender_id()
 	# Check if command is stale or duplicate
 	if _last_command_sequence.get(peer, 0) >= sequence: return
