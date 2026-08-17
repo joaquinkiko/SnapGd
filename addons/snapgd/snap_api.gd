@@ -1,18 +1,30 @@
 ## Global API for SnapGd
 extends Node
 
-## TODO: Settings for tick-rate  (30-128hz), max ticks per frame, and snapshot-rate(10-30hz)
-## TODO: Settings for interpolation-delay (50-150ms), reconciliation threshold, max-rewind (200-300ms)
-
+## Ticks-per-second
+const _DEFAULT_TICK_RATE := 60
+const _MIN_TICK_RATE := 30
+const _MAX_TICK_RATE := 128
+## Snapshots-per-second
+const _DEFAULT_SNAPSHOT_RATE := 60
+const _MIN_SNAPSHOT_RATE := 30
+const _MAX_SNAPSHOT_RATE := 128
+## Interpolation delay in msec
+const _DEFAULT_LERP_DELAY := 100.0
+const _MIN_LERP_DELAY := 50.0
+const _MAX_LERP_DELAY := 150.0
+## Max lag-compensation rewinding in msec
+const _DEFAULT_REWIND_TIME := 250.0
+const _MIN_REWIND_TIME := 200.0
+const _MAX_REWIND_TIME := 300.0
 ## Sequence buffer size for outbound packets
 const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
-
 ## Prediction errors beyond this should be hard-snapped
 const _RECONCILIATION_THRESHOLD := 1.0
 ## Prediction errors below this should be ignored (assume floating point noise)
 const _RECONCILIATION_EPSILON := 0.001
-
+## Max ticks to process per frame to prevent death loop
 const _MAX_TICKS_PER_FRAME := 8
 
 ## Emitted once before any ticks are processed this frame. Any data
@@ -35,34 +47,78 @@ signal simulate_command(command: SnapCommand)
 ## (e.g. moving platforms, projectiles, NPCs).
 signal simulate_world(delta: float)
 
+# Client-side data
+
+## Client current command sequence
 var _command_sequence: int
+## Client command history buffer of size [member _SEQ_BUFFER_SIZE]
 var _command_history: Array[SnapCommand]
+## Client state history buffer of size [member _SEQ_BUFFER_SIZE]
 var _state_history: Array[SnapState]
-
-var _pending_commands: Dictionary[int, Array]
-var _last_command_sequence: Dictionary[int, int]
-
 ## Latest snapshot received, waiting to be reconciled on the next tick.
 var _pending_snapshot: Snapshot
-
-## All registered [NetNode]s to be handled.
-var _net_nodes: Array[NetNode]
-
 ## Leftover visual-only properties after soft correction.
 ## Decays toward empty every client tick.
 var _render_offsets: Dictionary[StringName, Variant]
 
-var ticks_per_snapshot: int
+# Server-side data
 
-var current_tick: int
+## Commands that server needs to process next tick (peer : commands)
+var _pending_commands: Dictionary[int, Array]
+## Last command sequence processed (peer : sequence)
+var _last_command_sequence: Dictionary[int, int]
+
+# Shared server and client data
+
+## All registered [NetNode]s to be handled.
+var _net_nodes: Array[NetNode]
+
+## Current simulation tick
+var current_tick: int:
+	get: return _current_tick
+	set(value):
+		push_warning("'_current_tick' should not be manually set")
+var _current_tick: int = 0
+
+# Configuration data
+
+## How far in past (in msec) remote peers are rendered.
+var interpolation_delay_msec: float:
+	get: return _interpolation_delay_msec
+	set(value): _interpolation_delay_msec = clampf(value, _MIN_LERP_DELAY, _MAX_LERP_DELAY)
+var _interpolation_delay_msec: float = _DEFAULT_LERP_DELAY
+
+## How far back (in msec) server allows for lag-compensation rewinding.
+var max_rewind_msec: float:
+	get: return _max_rewind_msec
+	set(value): _max_rewind_msec = clampf(value, _MIN_REWIND_TIME, _MAX_REWIND_TIME)
+var _max_rewind_msec: float = _DEFAULT_REWIND_TIME
+
+## How often Snapshots should be sent from server to peers.
+var snapshot_rate: float:
+	get:
+		return _tick_rate / float(maxi(1, _ticks_per_snapshot))
+	set(value):
+		_ticks_per_snapshot = clampi(
+			roundi(_tick_rate / maxf(1.0, value)),
+			_MIN_SNAPSHOT_RATE, _MAX_SNAPSHOT_RATE
+		)
+var _ticks_per_snapshot: int = roundi(_tick_rate / maxf(1.0, _DEFAULT_SNAPSHOT_RATE))
 
 ## Simulation tick rate in ticks per second
 var _tick_rate: float:
-	get: return 1e6 / float(maxi(1, _usecs_per_tick))
-	set(value): _usecs_per_tick = maxi(1, ceili(1e6 / float(value)))
-## Current mircoseconds between ticks
-var _usecs_per_tick: int = 16667 # 60/s
+	get:
+		return 1e6 / float(maxi(1, _usecs_per_tick))
+	set(value):
+		_usecs_per_tick = clampi(ceili(1e6 / float(value)), _MIN_TICK_RATE, _MAX_TICK_RATE)
+		_tick_delta = _usecs_per_tick / 1e6
 
+# Time calculation data
+
+## Current mircoseconds between ticks
+var _usecs_per_tick: int = ceili(1e6 / _DEFAULT_TICK_RATE)
+## Current seconds between ticks
+var _tick_delta: float = ceili(1e6 / _DEFAULT_TICK_RATE) / 1e6
 ## Time accumulator in mircoseconds
 var _usec_accumulator: int
 ## Carryover from delta float, to help keep precision
@@ -88,12 +144,11 @@ func _handle_time(delta) -> void:
 ## determine if new ticks should be processed
 func _process_ticks() -> void:
 	if _usec_accumulator < _usecs_per_tick: return # Ignore if no ticks queued
-	var tick_delta: float = _usecs_per_tick / 1e6 # convert mircoseconds to seconds
 	pre_tick_loop.emit()
 	for t in mini(_usec_accumulator / _usecs_per_tick, _MAX_TICKS_PER_FRAME):
-		pre_tick.emit(current_tick)
+		pre_tick.emit(_current_tick)
 		_usec_accumulator -= _usecs_per_tick
-		current_tick += 1
+		_current_tick += 1
 		if multiplayer.is_server():
 			_on_server_tick(_tick_rate)
 		else:
@@ -101,8 +156,8 @@ func _process_ticks() -> void:
 			if _pending_snapshot:
 				_on_snapshot_received(_pending_snapshot)
 				_pending_snapshot = null
-			_decay_render_offsets(tick_delta)
-		post_tick.emit(current_tick)
+			_decay_render_offsets(_tick_delta)
+		post_tick.emit(_current_tick)
 	post_tick_loop.emit()
 
 func _on_client_tick(delta: float) -> void:
@@ -112,7 +167,7 @@ func _on_client_tick(delta: float) -> void:
 	sample_input.emit(command)
 	_command_sequence += 1
 	command.sequence = _command_sequence
-	command.tick = current_tick
+	command.tick = _current_tick
 	command.delta_time = delta
 	# Capture sampled data
 	for node in _owned_net_nodes():
@@ -148,7 +203,7 @@ func _on_server_tick(delta: float) -> void:
 	
 	simulate_world.emit(delta)
 	
-	if current_tick % ticks_per_snapshot == 0:
+	if _current_tick % _ticks_per_snapshot == 0:
 		for peer in multiplayer.get_peers():
 			var snapshot := _build_snapshot(peer)
 			# Send to peer (unreliable)
@@ -162,7 +217,7 @@ func _on_server_tick(delta: float) -> void:
 
 func _build_snapshot(peer: int) -> Snapshot:
 	var snapshot := Snapshot.new()
-	snapshot.server_tick = current_tick
+	snapshot.server_tick = _current_tick
 	snapshot.last_command_sequence = _last_command_sequence[peer]
 	var state := SnapState.new()
 	state.sequence = snapshot.last_command_sequence
@@ -217,10 +272,6 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 			for key in authoritative_state.data:
 				if predicted_state.data.has(key):
 					_render_offsets[key] = _variant_subtract(predicted_state.data[key], authoritative_state.data[key])
-
-## TODO: Add interpolation handling
-
-## TODO: Add delta compression handling
 
 ## Runs [param command] against every locally-owned [NetNode].
 func _simulate_command(command: SnapCommand) -> void:
@@ -331,3 +382,9 @@ func _receive_snapshot(server_tick: int, baseline_tick: int, last_command_sequen
 		snapshot.states.append(state)
 	# Add command to be reconciled
 	_pending_snapshot = snapshot
+
+## TODO: Add interpolation handling (planned NetInterpolator node will read offsets
+## plus buffered snapshots, to delay by interpolation_delay_msec to smooth rendering)
+
+## TODO: Add delta compression handling (Snapshot.baseline_tick will
+## eventually be used to compress states_data in _receive_snapshot
