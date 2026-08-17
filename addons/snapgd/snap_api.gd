@@ -58,9 +58,13 @@ func _process_ticks() -> void:
 		_usec_accumulator -= _usecs_per_tick
 		current_tick += 1
 		if multiplayer.is_server():
+			## TODO: check for new packets to apply / update acks
 			_on_server_tick(_tick_rate)
+			## TODO: store snapshot history
 		else:
 			_on_client_tick(_tick_rate)
+			## TODO: check for new packets to reconicle/interpolate
+			## TODO: blend reconciled-packets
 		## TODO: post-tick signal
 	## TODO: post-tick loop signal
 
