@@ -137,7 +137,6 @@ func _ready() -> void:
 	_command_history.resize(_SEQ_BUFFER_SIZE)
 	_state_history.resize(_SEQ_BUFFER_SIZE)
 	multiplayer.connected_to_server.connect(_timer_reset)
-	multiplayer.peer_connected.connect(_provide_peer_time)
 
 func _process(delta: float) -> void:
 	_handle_time(delta)
@@ -404,21 +403,32 @@ func _timer_reset() -> void:
 	_current_tick = 0
 	_usec_accumulator = 0
 	_delta_carryover = 0.0
+	if not multiplayer.is_server():
+		_request_time.rpc_id(1, Time.get_ticks_usec())
 
-## For server to provide time information to new peers
-func _provide_peer_time(peer: int) -> void:
-	if not multiplayer.is_server(): return # This is server -> peer only
+@rpc("any_peer", "reliable", "call_remote")
+func _request_time(client_send_time: int) -> void:
+	if not multiplayer.is_server(): return # Only peer -> server
+	## TODO: account for RTT
+	var peer := multiplayer.get_remote_sender_id()
 	_receive_time.rpc_id(peer,
 		_tick_rate,
-		_usec_accumulator
+		_usec_accumulator,
+		_current_tick,
+		client_send_time
 	)
 
-@rpc("authority", "unreliable_ordered", "call_remote")
-func _receive_time(_server_rate: int, accumulator: int) -> void:
+@rpc("authority", "reliable", "call_remote")
+func _receive_time(server_rate: int, accumulator: int, tick: int, client_send_time: int) -> void:
 	if multiplayer.is_server(): return # Only server -> peer
-	## TODO: account for RTT
-	_tick_rate = _server_rate
-	_usec_accumulator = accumulator
+	# Estimate RTT from original request send time
+	var rtt_usec := Time.get_ticks_usec() - client_send_time
+	# Ensure we are synced with server rate
+	_tick_rate = server_rate
+	# Get time based on sent time plus estimated RTT
+	var total_usecs := (tick * _usecs_per_tick) + accumulator + maxi(0, rtt_usec / 2)
+	_current_tick = total_usecs / _usecs_per_tick
+	_usec_accumulator = total_usecs % _usecs_per_tick
 
 ## TODO: Add interpolation handling (planned NetInterpolator node will read offsets
 ## plus buffered snapshots, to delay by interpolation_delay_msec to smooth rendering)
