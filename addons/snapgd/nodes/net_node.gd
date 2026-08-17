@@ -5,7 +5,11 @@ class_name NetNode extends Node
 
 @export var state_properties: PackedStringArray
 
-## TODO: register/unregister node
+func _enter_tree() -> void:
+	SnapAPI.register_net_node(self)
+
+func _exit_tree() -> void:
+	SnapAPI.unregister_net_node(self)
 
 func capture_command(command: SnapCommand) -> void:
 	for prop in command_properties:
