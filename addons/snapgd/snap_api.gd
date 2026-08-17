@@ -314,6 +314,12 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 			for key in authoritative_state.data:
 				if predicted_state.data.has(key):
 					_render_offsets[key] = _variant_subtract(predicted_state.data[key], authoritative_state.data[key])
+	
+	# Placeholder until interpolation is implemented
+	for node in _net_nodes:
+		if is_instance_valid(node) and node.is_multiplayer_authority():
+			continue
+		node.apply_state(authoritative_state)
 
 ## Runs [param command] against every locally-owned [NetNode].
 func _simulate_command(command: SnapCommand) -> void:
