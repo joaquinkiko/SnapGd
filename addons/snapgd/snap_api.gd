@@ -8,6 +8,8 @@ const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
 const _ERROR_THRESHOLD := 1.0
 const _EPSILON := 8.854 * 10e12
 
+const _MAX_TICKS_PER_FRAME := 8
+
 var _command_sequence: int
 var _command_history: Array[SnapCommand]
 var _state_history: Array[SnapState]
@@ -18,6 +20,49 @@ var _last_command_sequence: Dictionary[int, int]
 var ticks_per_snapshot: int
 
 var current_tick: int
+
+## Simulation tick rate in ticks per second
+var _tick_rate: float:
+	get: return 1e6 / float(maxi(1, _usecs_per_tick))
+	set(value): _usecs_per_tick = maxi(1, ceili(1e6 / float(value)))
+## Current mircoseconds between ticks
+var _usecs_per_tick: int = 16667 # 60/s
+
+## Time accumulator in mircoseconds
+var _usec_accumulator: int
+## Carryover from delta float, to help keep precision
+var _delta_carryover: float
+
+func _process(delta: float) -> void:
+	_handle_time(delta)
+	_process_ticks()
+
+## Updates [member _usec_accumulator] and [member _delta_carryover]
+func _handle_time(delta) -> void:
+	# Convert delta to usecs
+	var _delta_usecs: int = delta * 1e6
+	# Carryover excess float precision
+	_delta_carryover += (delta * 1e6) - _delta_usecs
+	while _delta_carryover >= 1.0:
+		_delta_usecs += 1
+		_delta_carryover -= 1.0
+	# Add converted time to accumulator
+	_usec_accumulator += _delta_usecs
+
+## Looks to [member _usec_accumulator] and [member _usecs_per_tick] to
+## determine if new ticks should be processed
+func _process_ticks() -> void:
+	## TODO: pre-tick loop signal
+	for t in mini(_usec_accumulator / _usecs_per_tick, _MAX_TICKS_PER_FRAME):
+		## TODO: pre-tick signal
+		_usec_accumulator -= _usecs_per_tick
+		current_tick += 1
+		if multiplayer.is_server():
+			_on_server_tick(_tick_rate)
+		else:
+			_on_client_tick(_tick_rate)
+		## TODO: post-tick signal
+	## TODO: post-tick loop signal
 
 func _on_client_tick(delta: float) -> void:
 	# Create new command and increment sequence
