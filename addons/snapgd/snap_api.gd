@@ -103,7 +103,10 @@ var snapshot_rate: float:
 			roundi(_tick_rate / maxf(1.0, value)),
 			_MIN_SNAPSHOT_RATE, _MAX_SNAPSHOT_RATE
 		)
-var _ticks_per_snapshot: int = roundi(_tick_rate / maxf(1.0, _DEFAULT_SNAPSHOT_RATE))
+var _ticks_per_snapshot: int = roundi(
+	1e6 / ceili(1e6 / _DEFAULT_TICK_RATE) #_tick_rate
+	/ maxf(1.0, _DEFAULT_SNAPSHOT_RATE)
+	)
 
 ## Simulation tick rate in ticks per second
 var tick_rate: float:
