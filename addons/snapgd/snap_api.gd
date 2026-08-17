@@ -113,12 +113,19 @@ func _on_client_tick(delta: float) -> void:
 	command.sequence = _command_sequence
 	command.tick = current_tick
 	command.delta_time = delta
-	# Add command to back of queue
-	_command_history.push_back(command)
+	# Capture sampled data
+	for node in _owned_net_nodes():
+		node.capture_command(command)
+	# Store command in buffer
+	_command_history[command.sequence & _SEQ_BUFFER_MASK] = command
 	# TODO: send to server
-	# TODO: simulate command
-	# TODO: push state history
-	# TODO: finish rendering simulation
+	# Predict command
+	_simulate_command(command)
+	# Store in state history
+	var state := SnapState.new()
+	state.sequence = command.sequence
+	for node in _owned_net_nodes():
+		node.capture_state(state)
 
 func _on_server_tick(delta: float) -> void:
 	# Simulate all commands...
