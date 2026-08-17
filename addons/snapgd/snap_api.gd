@@ -166,11 +166,11 @@ func _process_ticks() -> void:
 		_usec_accumulator -= _usecs_per_tick
 		_current_tick += 1
 		if multiplayer.is_server():
-			_on_server_tick(_tick_rate)
+			_on_server_tick(_tick_delta)
 			if is_client_server:
-				_on_client_tick(_tick_rate)
+				_on_client_tick(_tick_delta)
 		else:
-			_on_client_tick(_tick_rate)
+			_on_client_tick(_tick_delta)
 			if _pending_snapshot:
 				_on_snapshot_received(_pending_snapshot)
 				_pending_snapshot = null
