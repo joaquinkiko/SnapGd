@@ -63,6 +63,8 @@ var _render_offsets: Dictionary[StringName, Variant]
 
 # Server-side data
 
+## While true, server will process input client commands for themselves.
+var is_client_server: bool = true
 ## Commands that server needs to process next tick (peer : commands)
 var _pending_commands: Dictionary[int, Array]
 ## Last command sequence processed (peer : sequence)
@@ -165,6 +167,8 @@ func _process_ticks() -> void:
 		_current_tick += 1
 		if multiplayer.is_server():
 			_on_server_tick(_tick_rate)
+			if is_client_server:
+				_on_client_tick(_tick_rate)
 		else:
 			_on_client_tick(_tick_rate)
 			if _pending_snapshot:
@@ -189,12 +193,20 @@ func _on_client_tick(delta: float) -> void:
 	# Store command in buffer
 	_command_history[command.sequence & _SEQ_BUFFER_MASK] = command
 	# Send to server (unreliable)
-	_receive_command.rpc_id(1,
-		command.sequence,
-		command.tick,
-		command.delta_time,
-		command.data
-	)
+	if multiplayer.is_server():
+		_receive_command(
+			command.sequence,
+			command.tick,
+			command.delta_time,
+			command.data
+		)
+	else:
+		_receive_command.rpc_id(1,
+			command.sequence,
+			command.tick,
+			command.delta_time,
+			command.data
+		)
 	# Predict command
 	_simulate_command(command)
 	# Store in state history
