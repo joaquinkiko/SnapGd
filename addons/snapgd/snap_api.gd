@@ -178,12 +178,12 @@ func _process_ticks() -> void:
 func _on_client_tick(delta: float) -> void:
 	# Create new command and increment sequence
 	var command := SnapCommand.new()
-	# Ensure input data is populated before capturing commands
-	sample_input.emit(command)
 	_command_sequence += 1
 	command.sequence = _command_sequence
 	command.tick = _current_tick
 	command.delta_time = delta
+	# Ensure input data is populated before capturing commands
+	sample_input.emit(command)
 	# Capture sampled data
 	for node in _owned_net_nodes():
 		node.capture_command(command)
