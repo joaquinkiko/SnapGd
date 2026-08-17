@@ -216,9 +216,7 @@ func _on_server_tick(delta: float) -> void:
 			# Pop command from front of queue
 			var command: SnapCommand = _pending_commands.get(peer, []).pop_front()
 			# Simulate this peer's world
-			for node in _net_nodes: # All NetNodes NOT owned by self
-				if is_instance_valid(node) and node.is_multiplayer_authority():
-					continue
+			for node in _not_owned_net_nodes():
 				node.apply_command(command)
 			simulate_command.emit(command)
 			# Update latest command processed for peer
@@ -320,9 +318,7 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 					_render_offsets[key] = _variant_subtract(predicted_state.data[key], authoritative_state.data[key])
 	
 	# Placeholder until interpolation is implemented
-	for node in _net_nodes:
-		if is_instance_valid(node) and node.is_multiplayer_authority():
-			continue
+	for node in _not_owned_net_nodes():
 		node.apply_state(authoritative_state)
 
 ## Runs [param command] against every locally-owned [NetNode].
@@ -338,6 +334,16 @@ func _owned_net_nodes() -> Array[NetNode]:
 		if is_instance_valid(node) and node.is_multiplayer_authority():
 			result.append(node)
 	return result
+
+## [NetNode]s NOT owned by self.
+func _not_owned_net_nodes() -> Array[NetNode]:
+	var result: Array[NetNode] = []
+	for node in _net_nodes:
+		if is_instance_valid(node) and node.is_multiplayer_authority():
+			continue
+		result.append(node)
+	return result
+
 
 ## [NetNode]s owned by [param peer].
 func _peer_net_nodes(peer: int) -> Array[NetNode]:
