@@ -13,6 +13,26 @@ const _EPSILON := 8.854 * 10e12
 
 const _MAX_TICKS_PER_FRAME := 8
 
+## Emitted once before any ticks are processed this frame. Any data
+## that doesn't change more than once per frame should be sampled here.
+signal pre_tick_loop
+## Emitted once after all ticks this frame have been processed.
+## Rendering updates should be done here.
+signal post_tick_loop
+## Emitted before a single tick is simulated.
+signal pre_tick(tick: int)
+## Emitted after a single tick has been fully simulated.
+signal post_tick(tick: int)
+## Emitted on the client right before a new [SnapCommand] is captured.
+## Client input should be sampled during this time.
+signal sample_input(command: SnapCommand)
+## Emitted whenever a peer-owned command should be simulated (client
+## prediction, or server-side authoritative simulation of a peer's command).
+signal simulate_command(command: SnapCommand)
+## Emitted once per server tick for objects that aren't owned by any peer
+## (e.g. moving platforms, projectiles, NPCs).
+signal simulate_world(delta: float)
+
 var _command_sequence: int
 var _command_history: Array[SnapCommand]
 var _state_history: Array[SnapState]
@@ -55,9 +75,10 @@ func _handle_time(delta) -> void:
 ## Looks to [member _usec_accumulator] and [member _usecs_per_tick] to
 ## determine if new ticks should be processed
 func _process_ticks() -> void:
-	## TODO: pre-tick loop signal
+	if _usec_accumulator < _usecs_per_tick: return # Ignore if no ticks queued
+	pre_tick_loop.emit()
 	for t in mini(_usec_accumulator / _usecs_per_tick, _MAX_TICKS_PER_FRAME):
-		## TODO: pre-tick signal
+		pre_tick.emit(current_tick)
 		_usec_accumulator -= _usecs_per_tick
 		current_tick += 1
 		if multiplayer.is_server():
@@ -68,13 +89,14 @@ func _process_ticks() -> void:
 			_on_client_tick(_tick_rate)
 			## TODO: check for new packets to reconicle/interpolate
 			## TODO: blend reconciled-packets
-		## TODO: post-tick signal
-	## TODO: post-tick loop signal
+		post_tick.emit(current_tick)
+	post_tick_loop.emit()
 
 func _on_client_tick(delta: float) -> void:
 	# Create new command and increment sequence
 	var command := SnapCommand.new()
-	# TODO: Sample input
+	# Ensure input data is populated before capturing commands
+	sample_input.emit(command)
 	_command_sequence += 1
 	command.sequence = _command_sequence
 	command.tick = current_tick
@@ -94,9 +116,12 @@ func _on_server_tick(delta: float) -> void:
 		if command == null:
 			continue # No comman arrived
 		# Simulate this peer's world
+		simulate_command.emit(command)
+		# Update latest command processed for peer
 		_last_command_sequence[peer] = command.sequence
 	
-	# Simulate non-peer owned objects
+	simulate_world.emit(delta)
+	
 	current_tick += 1
 	
 	if current_tick % ticks_per_snapshot == 0:
