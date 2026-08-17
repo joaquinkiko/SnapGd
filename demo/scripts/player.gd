@@ -1,5 +1,6 @@
 extends CharacterBody3D
 
+const USE_CUSTOM_PHYSICS := true
 const MOVE_SPEED := 6.0
 const JUMP_VELOCITY := 8.0
 const GRAVITY := 24.0
@@ -9,6 +10,10 @@ const MOUSE_SENSITIVITY := 0.002
 const PITCH_LIMIT := deg_to_rad(80)
 const HEAD_INDEX := 5
 
+@export var camera_node: Camera3D
+@export var animation_player: AnimationPlayer
+@export var skeleton: Skeleton3D
+
 enum AnimationState {
 	STANDING = 0,
 	WALKING = 1,
@@ -17,60 +22,59 @@ enum AnimationState {
 }
 var animation_state := AnimationState.STANDING
 var _previous_animation_state := -1
+var _jump_animation_state := false
 
+# Command inputs
 var camera_yaw := 0.0
 var camera_pitch := 0.0
 var should_jump := false
 var input_dir := Vector2.ZERO
 
-var received_mouse_button := false
-var jump_state := false
-
-@export var camera_node: Camera3D
-@export var animation_player: AnimationPlayer
-@export var skeleton: Skeleton3D
-
 func _enter_tree() -> void:
 	SnapAPI.simulate_command.connect(_simulate)
 	SnapAPI.sample_input.connect(_gather_input)
 	set_multiplayer_authority(name.trim_prefix("Player").to_int())
-	if is_multiplayer_authority():
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-		camera_node.current = true
 
 func _ready() -> void:
 	if not is_multiplayer_authority():
 		camera_node.current = false
 		return
+	else:
+		camera_node.current = true
+	# Setup skeleton for head rotation
 	skeleton.set_bone_global_pose_override(HEAD_INDEX, skeleton.get_bone_global_pose(HEAD_INDEX), 1.0, true)
 	# Own character should be invisible
 	if camera_node.current:
 		visible = false
+	else:
+		visible = true
 
 func _input(event: InputEvent) -> void:
 	if not is_multiplayer_authority(): return
 	
-	if event is InputEventMouseMotion:
-		if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
-			_rotate_camera(event.relative)
-	elif event is InputEventMouseButton:
-		if Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
-			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-			return
-		if event.pressed and event.button_index == MouseButton.MOUSE_BUTTON_LEFT:
-			received_mouse_button = true
-	
+	# Grab/release camera
 	if event is InputEventKey and event.keycode == KEY_ESCAPE:
-			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	elif event is InputEventMouseButton and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	if Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
+		return # Ignore input if not currently in focus
 	
-	if Input.is_action_just_pressed("ui_accept") and is_on_floor():
+	# Get look direction
+	if event is InputEventMouseMotion:
+		_rotate_camera(event.relative)
+	# Get jump action
+	if Input.is_action_just_pressed("ui_accept"):
 		should_jump = true
 
 func _gather_input(_command: SnapCommand) -> void:
 	if not is_multiplayer_authority(): return
+	# Get move direction
 	input_dir.x = int(Input.is_key_label_pressed(KEY_D)) - int(Input.is_key_label_pressed(KEY_A))
 	input_dir.y = int(Input.is_key_label_pressed(KEY_S)) - int(Input.is_key_label_pressed(KEY_W))
 	input_dir = input_dir.normalized()
+	# Check if should_jump is valid
+	should_jump = should_jump and _is_on_floor()
 
 func _simulate(command: SnapCommand) -> void:
 	# Grab delta from command
@@ -95,15 +99,16 @@ func _simulate(command: SnapCommand) -> void:
 	
 	# Handle gravity
 	var gravity_velocity := velocity.y
-	if is_on_floor():
+	if _is_on_floor():
 		if should_jump:
 			gravity_velocity = JUMP_VELOCITY
-			jump_state = true
+			_jump_animation_state = true
 		else:
 			gravity_velocity = 0.0
-			jump_state = false
+			_jump_animation_state = false
 	else:
 		gravity_velocity -= GRAVITY * delta
+	# Consume should_jump, so it's not resimulated next tick without command
 	should_jump = false
 	
 	# Get move direction
@@ -120,7 +125,7 @@ func _simulate(command: SnapCommand) -> void:
 	# Update animation
 	_update_animation(is_on_floor(), horizontal_velocity.length())
 	# Apply movement
-	move_and_slide()
+	_apply_motion(delta)
 
 func _rotate_camera(mouse_delta: Vector2) -> void:
 	camera_yaw += -mouse_delta.x * MOUSE_SENSITIVITY
@@ -128,8 +133,9 @@ func _rotate_camera(mouse_delta: Vector2) -> void:
 	camera_pitch = clamp(camera_pitch, -PITCH_LIMIT, PITCH_LIMIT)
 
 func _update_animation(on_floor: bool, horizontal_speed: float) -> void:
-	if not on_floor:
-		if jump_state:
+	if not multiplayer.is_server(): return
+	if not _is_on_floor():
+		if _jump_animation_state:
 			animation_state = AnimationState.JUMPING
 		else:
 			animation_state = AnimationState.FALLING
@@ -137,3 +143,34 @@ func _update_animation(on_floor: bool, horizontal_speed: float) -> void:
 		animation_state = AnimationState.WALKING
 	else:
 		animation_state = AnimationState.STANDING
+
+func _is_on_floor() -> bool:
+	if USE_CUSTOM_PHYSICS:
+		var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+		var origin: Vector3 = global_position + Vector3.UP * 0.05
+		var target: Vector3 = global_position + Vector3.DOWN * 0.15
+		var params := PhysicsRayQueryParameters3D.create(origin, target)
+		params.exclude = [self]
+		params.collision_mask = collision_mask
+		return space.intersect_ray(params).size() > 0
+	else:
+		return is_on_floor()
+
+func _apply_motion(delta: float) -> void:
+	if USE_CUSTOM_PHYSICS:
+		var remaining: Vector3 = velocity * delta
+		var collision: KinematicCollision3D
+		for _i in 4: # Max slides
+			if remaining.is_zero_approx():
+				break
+			collision = KinematicCollision3D.new()
+			if test_move(global_transform, remaining, collision):
+				global_position += collision.get_travel()
+				var normal: Vector3 = collision.get_normal()
+				remaining = remaining.slide(normal)
+				velocity = velocity.slide(normal)
+			else:
+				global_position += remaining
+				break
+	else:
+		move_and_slide()
