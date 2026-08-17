@@ -203,6 +203,7 @@ func _on_client_tick(delta: float) -> void:
 	state.sequence = command.sequence
 	for node in _owned_net_nodes():
 		node.capture_state(state)
+	_state_history[command.sequence & _SEQ_BUFFER_MASK] = state
 
 func _on_server_tick(delta: float) -> void:
 	# Simulate all commands...
