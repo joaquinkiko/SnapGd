@@ -119,7 +119,13 @@ func _on_client_tick(delta: float) -> void:
 		node.capture_command(command)
 	# Store command in buffer
 	_command_history[command.sequence & _SEQ_BUFFER_MASK] = command
-	# TODO: send to server
+	# Send to server (unreliable)
+	_receive_command.rpc_id(1,
+		command.sequence,
+		command.tick,
+		command.delta_time,
+		command.data
+	)
 	# Predict command
 	_simulate_command(command)
 	# Store in state history
@@ -145,7 +151,14 @@ func _on_server_tick(delta: float) -> void:
 	if current_tick % ticks_per_snapshot == 0:
 		for peer in multiplayer.get_peers():
 			var snapshot := _build_snapshot(peer)
-			# TODO: send to clients
+			# Send to peer (unreliable)
+			_receive_snapshot.rpc_id(
+				peer,
+				snapshot.server_tick,
+				snapshot.baseline_tick,
+				snapshot.last_command_sequence,
+				_states_to_array(snapshot.states)
+			)
 
 func _build_snapshot(peer: int) -> Snapshot:
 	var snapshot := Snapshot.new()
@@ -235,6 +248,13 @@ func register_net_node(node: NetNode) -> void:
 func unregister_net_node(node: NetNode) -> void:
 	_net_nodes.erase(node)
 
+## Prep for sending over RPC. Each entry is Array of [sequence: int, data: Dictionary].
+func _states_to_array(states: Array[SnapState]) -> Array[Array]:
+	var out: Array = []
+	for state in states:
+		out.append([state.sequence, state.data])
+	return out
+
 ## Blends [member render_offsets] toward zero every client tick.
 func _decay_render_offsets(delta: float) -> void:
 	if _render_offsets.is_empty():
@@ -275,3 +295,34 @@ func _variant_subtract(a: Variant, b: Variant) -> Variant:
 			return a - b
 		_:
 			return null
+
+@rpc("any_peer", "unreliable_ordered", "call_remote")
+func _receive_command(sequence: int, tick: int, delta_time: float, data: Dictionary) -> void:
+	if not multiplayer.is_server(): return # Only peer -> server
+	var peer := multiplayer.get_remote_sender_id()
+	# Check if command is stale or duplicate
+	if _last_command_sequence.get(peer, 0) >= sequence: return
+	var command := SnapCommand.new()
+	command.sequence = sequence
+	command.tick = tick
+	command.delta_time = delta_time
+	command.data = data
+	# Add command to be processed
+	if not _pending_commands.has(peer):
+		_pending_commands[peer] = []
+	_pending_commands[peer].append(command)
+
+@rpc("authority", "unreliable_ordered", "call_remote")
+func _receive_snapshot(server_tick: int, baseline_tick: int, last_command_sequence: float, states_data: Array[Array]) -> void:
+	if multiplayer.is_server(): return # Only server -> peer
+	var snapshot := Snapshot.new()
+	snapshot.server_tick = server_tick
+	snapshot.baseline_tick = baseline_tick
+	snapshot.last_command_sequence = last_command_sequence
+	for entry in states_data:
+		var state := SnapState.new()
+		state.sequence = entry.get(0)
+		state.data = entry.get(1)
+		snapshot.states.append(state)
+	# Add command to be reconciled
+	_pending_snapshot = snapshot
