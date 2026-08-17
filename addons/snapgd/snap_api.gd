@@ -106,6 +106,13 @@ var snapshot_rate: float:
 var _ticks_per_snapshot: int = roundi(_tick_rate / maxf(1.0, _DEFAULT_SNAPSHOT_RATE))
 
 ## Simulation tick rate in ticks per second
+var tick_rate: float:
+	get: return _tick_rate
+	set(value):
+		if multiplayer.has_multiplayer_peer():
+			push_warning("Cannot set tick_rate while actively connected")
+		else:
+			_tick_rate = value
 var _tick_rate: float:
 	get:
 		return 1e6 / float(maxi(1, _usecs_per_tick))
@@ -123,6 +130,12 @@ var _tick_delta: float = ceili(1e6 / _DEFAULT_TICK_RATE) / 1e6
 var _usec_accumulator: int
 ## Carryover from delta float, to help keep precision
 var _delta_carryover: float
+
+func _ready() -> void:
+	_command_history.resize(_SEQ_BUFFER_SIZE)
+	_state_history.resize(_SEQ_BUFFER_SIZE)
+	multiplayer.connected_to_server.connect(_timer_reset)
+	multiplayer.peer_connected.connect(_provide_peer_time)
 
 func _process(delta: float) -> void:
 	_handle_time(delta)
@@ -382,6 +395,27 @@ func _receive_snapshot(server_tick: int, baseline_tick: int, last_command_sequen
 		snapshot.states.append(state)
 	# Add command to be reconciled
 	_pending_snapshot = snapshot
+
+## Sets up time when connecting to server
+func _timer_reset() -> void:
+	_current_tick = 0
+	_usec_accumulator = 0
+	_delta_carryover = 0.0
+
+## For server to provide time information to new peers
+func _provide_peer_time(peer: int) -> void:
+	if not multiplayer.is_server(): return # This is server -> peer only
+	_receive_time.rpc_id(peer,
+		_tick_rate,
+		_usec_accumulator
+	)
+
+@rpc("authority", "unreliable_ordered", "call_remote")
+func _receive_time(_server_rate: int, accumulator: int) -> void:
+	if multiplayer.is_server(): return # Only server -> peer
+	## TODO: account for RTT
+	_tick_rate = _server_rate
+	_usec_accumulator = accumulator
 
 ## TODO: Add interpolation handling (planned NetInterpolator node will read offsets
 ## plus buffered snapshots, to delay by interpolation_delay_msec to smooth rendering)
