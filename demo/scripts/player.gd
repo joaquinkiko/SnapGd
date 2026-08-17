@@ -7,7 +7,6 @@ const ACCELERATION := 15.0
 const FRICTION := 12.0
 const MOUSE_SENSITIVITY := 0.002
 const PITCH_LIMIT := deg_to_rad(80)
-const SHOOT_RANGE := 50.0
 const HEAD_INDEX := 5
 
 enum AnimationState {
@@ -22,7 +21,6 @@ var _previous_animation_state := -1
 var camera_yaw := 0.0
 var camera_pitch := 0.0
 var should_jump := false
-var should_shoot := false
 var input_dir := Vector2.ZERO
 
 var received_mouse_button := false
@@ -33,6 +31,8 @@ var jump_state := false
 @export var skeleton: Skeleton3D
 
 func _enter_tree() -> void:
+	SnapAPI.simulate_command.connect(_simulate)
+	SnapAPI.sample_input.connect(_gather_input)
 	set_multiplayer_authority(name.trim_prefix("Player").to_int())
 	if is_multiplayer_authority():
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -62,8 +62,20 @@ func _input(event: InputEvent) -> void:
 	
 	if event is InputEventKey and event.keycode == KEY_ESCAPE:
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	
+	if Input.is_action_just_pressed("ui_accept") and is_on_floor():
+		should_jump = true
 
-func _physics_process(delta: float) -> void:
+func _gather_input(_command: SnapCommand) -> void:
+	if not is_multiplayer_authority(): return
+	input_dir.x = int(Input.is_key_label_pressed(KEY_D)) - int(Input.is_key_label_pressed(KEY_A))
+	input_dir.y = int(Input.is_key_label_pressed(KEY_S)) - int(Input.is_key_label_pressed(KEY_W))
+	input_dir = input_dir.normalized()
+
+func _simulate(command: SnapCommand) -> void:
+	# Grab delta from command
+	var delta: float = command.delta_time
+	
 	# Update camera
 	camera_node.rotation.x = camera_pitch
 	rotation.y = camera_yaw
@@ -81,10 +93,6 @@ func _physics_process(delta: float) -> void:
 	current_transform.basis = Basis(Quaternion(Vector3.RIGHT, -camera_pitch / 1.5))
 	skeleton.set_bone_global_pose_override(HEAD_INDEX, current_transform, 1.0, true)
 	
-	# Handle jump.
-	if Input.is_action_just_pressed("ui_accept") and is_on_floor():
-		should_jump = true
-	
 	# Handle gravity
 	var gravity_velocity := velocity.y
 	if is_on_floor():
@@ -98,9 +106,6 @@ func _physics_process(delta: float) -> void:
 		gravity_velocity -= GRAVITY * delta
 	should_jump = false
 	
-	input_dir.x = int(Input.is_key_label_pressed(KEY_D)) - int(Input.is_key_label_pressed(KEY_A))
-	input_dir.y = int(Input.is_key_label_pressed(KEY_S)) - int(Input.is_key_label_pressed(KEY_W))
-	input_dir = input_dir.normalized()
 	# Get move direction
 	var wish_dir: Vector3 = (
 		Basis(Vector3.UP, rotation.y) 

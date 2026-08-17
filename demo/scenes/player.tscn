@@ -1,12 +1,13 @@
 [gd_scene format=3 uid="uid://denicwshlb62b"]
 
-[ext_resource type="Script" uid="uid://cm5sk4nobms4q" path="res://demo/scripts/player.gd" id="1_r1htb"]
+[ext_resource type="Script" uid="uid://hj0hcpr1jg4f" path="res://demo/scripts/player.gd" id="1_r1htb"]
+[ext_resource type="Script" uid="uid://bp3yrvsyrbven" path="res://addons/snapgd/nodes/net_node.gd" id="3_m7rvx"]
 [ext_resource type="PackedScene" uid="uid://cgxwnhxus1cfr" path="res://demo/assets/3DGodotRobot.glb" id="5_vyyd1"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_8483k"]
 height = 1.8
 
-[node name="FpsPlayer" type="CharacterBody3D" unique_id=1328740095 node_paths=PackedStringArray("camera_node", "animation_player", "skeleton")]
+[node name="Player" type="CharacterBody3D" unique_id=1328740095 node_paths=PackedStringArray("camera_node", "animation_player", "skeleton")]
 script = ExtResource("1_r1htb")
 camera_node = NodePath("Camera3D")
 animation_player = NodePath("3DGodotRobot/AnimationPlayer")
@@ -54,5 +55,12 @@ bones/21/rotation = Quaternion(0.9914149, -0.020339629, 0.007486257, 0.12894535)
 bones/22/rotation = Quaternion(0.24962778, -0.008717655, -0.024974115, 0.96798056)
 bones/23/rotation = Quaternion(-0.60871387, -0.0033154436, 0.0047912565, 0.79336846)
 bones/24/rotation = Quaternion(6.345524e-08, 0.9807643, -0.19519578, -1.8277877e-06)
+
+[node name="NetNode" type="Node" parent="." unique_id=36749044 node_paths=PackedStringArray("root")]
+script = ExtResource("3_m7rvx")
+root = NodePath("..")
+command_properties = PackedStringArray(".:camera_yaw", ".:camera_pitch", ".:should_jump", ".:input_dir")
+state_properties = PackedStringArray(":position")
+metadata/_custom_type_script = "uid://bp3yrvsyrbven"
 
 [editable path="3DGodotRobot"]
