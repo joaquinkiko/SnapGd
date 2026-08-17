@@ -234,7 +234,7 @@ func _on_server_tick(delta: float) -> void:
 func _build_snapshot(peer: int) -> Snapshot:
 	var snapshot := Snapshot.new()
 	snapshot.server_tick = _current_tick
-	snapshot.last_command_sequence = _last_command_sequence[peer]
+	snapshot.last_command_sequence = _last_command_sequence.get(peer, 0)
 	var state := SnapState.new()
 	state.sequence = snapshot.last_command_sequence
 	for node in _net_nodes:
@@ -393,8 +393,8 @@ func _receive_snapshot(server_tick: int, baseline_tick: int, last_command_sequen
 	snapshot.last_command_sequence = last_command_sequence
 	for entry in states_data:
 		var state := SnapState.new()
-		state.sequence = entry.get(0)
-		state.data = entry.get(1)
+		state.sequence = entry[0]
+		state.data = entry[1]
 		snapshot.states.append(state)
 	# Add command to be reconciled
 	_pending_snapshot = snapshot
