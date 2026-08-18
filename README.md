@@ -22,6 +22,15 @@ After adding the latest [Release](../../releases/latest) to your project, enable
  
 > **Note:** SnapGd is still in early development (WIP). APIs and features may change before a stable release.
 
+## Roadmap
+
+- [ ]  Interpolation of remote properties
+- [ ]  Smoothing of reconciliation
+- [ ]  Lag compensated events
+- [ ]  API documentation
+- [ ]  Delta-compression
+- [ ]  Priority and interest management
+
 ## License
  
 This project is licensed under the [MIT License](LICENSE).
