@@ -48,6 +48,8 @@ signal simulate_command(command: SnapCommand)
 signal simulate_world(delta: float)
 ## Emitted whenever paused state changes
 signal pause_state_changed(paused: bool)
+## Emitted on client whenever a new snapshot is received (and before handled)
+signal snapshot_received(snapshot: Snapshot)
 
 # Client-side data
 
@@ -284,6 +286,7 @@ func _build_snapshot(peer: int) -> Snapshot:
 func _on_snapshot_received(snapshot: Snapshot) -> void:
 	if snapshot.states.is_empty():
 		return
+	snapshot_received.emit(snapshot)
 	var authoritative_state: SnapState = snapshot.states.back()
 	var acked_sequence: int = snapshot.last_command_sequence
 	# Discard history up to last processed sequence to avoid stale reads
