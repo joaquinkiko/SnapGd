@@ -61,7 +61,7 @@ var _state_history: Array[SnapState]
 var _pending_snapshot: Snapshot
 ## Leftover visual-only properties after soft correction.
 ## Decays toward empty every client tick.
-var _render_offsets: Dictionary[StringName, Variant]
+var render_offsets: Dictionary[StringName, Variant]
 
 # Server-side data
 
@@ -319,13 +319,13 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 	
 	if error > _RECONCILIATION_THRESHOLD:
 		# Large error, should be snapped to correction
-		_render_offsets.clear()
+		render_offsets.clear()
 	elif error > _RECONCILIATION_EPSILON:
 		# Small error, can be blended over multiple ticks
 		if predicted_state:
 			for key in authoritative_state.data:
 				if predicted_state.data.has(key):
-					_render_offsets[key] = _variant_subtract(predicted_state.data[key], authoritative_state.data[key])
+					render_offsets[key] = _variant_subtract(predicted_state.data[key], authoritative_state.data[key])
 	
 	# Placeholder until interpolation is implemented
 	for node in _not_owned_net_nodes():
@@ -381,20 +381,20 @@ func _states_to_array(states: Array[SnapState]) -> Array[Array]:
 
 ## Blends [member render_offsets] toward zero every client tick.
 func _decay_render_offsets(delta: float) -> void:
-	if _render_offsets.is_empty():
+	if render_offsets.is_empty():
 		return
 	var decay: float = clampf(delta / 0.15, 0.0, 1.0)
-	for key in _render_offsets.keys():
-		var offset: Variant = _render_offsets[key]
+	for key in render_offsets.keys():
+		var offset: Variant = render_offsets[key]
 		match typeof(offset):
 			TYPE_FLOAT, TYPE_INT, TYPE_VECTOR2, TYPE_VECTOR3:
 				offset = offset * (1.0 - decay)
 				if _variant_distance(offset, _variant_zero(offset)) <= _RECONCILIATION_EPSILON:
-					_render_offsets.erase(key)
+					render_offsets.erase(key)
 				else:
-					_render_offsets[key] = offset
+					render_offsets[key] = offset
 			_:
-				_render_offsets.erase(key) # not a smoothable type
+				render_offsets.erase(key) # not a smoothable type
 
 func _variant_zero(sample: Variant) -> Variant:
 	match typeof(sample):
@@ -518,7 +518,7 @@ func _sync_pause_state(paused: bool, server_tick: int, server_accumulator: int) 
 	_command_history.fill(null)
 	_state_history.fill(null)
 	_pending_snapshot = null
-	_render_offsets.clear()
+	render_offsets.clear()
 	
 	pause_state_changed.emit(paused)
 
