@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://hj0hcpr1jg4f" path="res://demo/scripts/player.gd" id="1_r1htb"]
 [ext_resource type="Script" uid="uid://bp3yrvsyrbven" path="res://addons/snapgd/nodes/net_node.gd" id="3_m7rvx"]
+[ext_resource type="Script" uid="uid://dgake6qgihm55" path="res://addons/snapgd/nodes/net_interpolator.gd" id="4_sh2ex"]
 [ext_resource type="PackedScene" uid="uid://cgxwnhxus1cfr" path="res://demo/assets/3DGodotRobot.glb" id="5_vyyd1"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_8483k"]
@@ -60,7 +61,14 @@ bones/24/rotation = Quaternion(6.345524e-08, 0.9807643, -0.19519578, -1.8277877e
 script = ExtResource("3_m7rvx")
 root = NodePath("..")
 command_properties = PackedStringArray(".:camera_yaw", ".:camera_pitch", ".:should_jump", ".:input_dir")
-state_properties = PackedStringArray(".:position", ".:rotation:x", ".:animation_state")
+state_properties = PackedStringArray(".:position", ".:rotation", ".:animation_state")
 metadata/_custom_type_script = "uid://bp3yrvsyrbven"
+
+[node name="NetInterpolator" type="Node" parent="NetNode" unique_id=1736350409 node_paths=PackedStringArray("net_node")]
+script = ExtResource("4_sh2ex")
+net_node = NodePath("..")
+interpolated_properties = PackedStringArray(".:position", ".:rotation")
+smoothed_properties = PackedStringArray(".:position", ".:rotation")
+metadata/_custom_type_script = "uid://dgake6qgihm55"
 
 [editable path="3DGodotRobot"]
