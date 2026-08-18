@@ -525,8 +525,5 @@ func _sync_pause_state(paused: bool, server_tick: int, server_accumulator: int) 
 	
 	pause_state_changed.emit(paused)
 
-## TODO: Add interpolation handling (planned NetInterpolator node will read offsets
-## plus buffered snapshots, to delay by interpolation_delay_msec to smooth rendering)
-
 ## TODO: Add delta compression handling (Snapshot.baseline_tick will
 ## eventually be used to compress states_data in _receive_snapshot
