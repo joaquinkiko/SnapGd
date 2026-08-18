@@ -46,6 +46,8 @@ signal simulate_command(command: SnapCommand)
 ## Emitted once per server tick for objects that aren't owned by any peer
 ## (e.g. moving platforms, projectiles, NPCs).
 signal simulate_world(delta: float)
+## Emitted whenever paused state changes
+signal pause_state_changed(paused: bool)
 
 # Client-side data
 
@@ -134,6 +136,13 @@ var _tick_delta: float = ceili(1e6 / _DEFAULT_TICK_RATE) / 1e6
 var _usec_accumulator: int
 ## Carryover from delta float, to help keep precision
 var _delta_carryover: float
+## Whether the simulation is currently paused. Only the server may change this.
+var is_paused: bool:
+	get:
+		return _is_paused
+	set(value):
+		push_warning("is_paused cannot be manually set, please use set_paused()")
+var _is_paused: bool = false
 
 func _ready() -> void:
 	_command_history.resize(_SEQ_BUFFER_SIZE)
@@ -141,8 +150,9 @@ func _ready() -> void:
 	multiplayer.connected_to_server.connect(_timer_reset)
 
 func _process(delta: float) -> void:
-	_handle_time(delta)
-	_process_ticks()
+	if not _is_paused:
+		_handle_time(delta)
+		_process_ticks()
 
 ## Updates [member _usec_accumulator] and [member _delta_carryover]
 func _handle_time(delta) -> void:
@@ -413,6 +423,7 @@ func _variant_subtract(a: Variant, b: Variant) -> Variant:
 @rpc("any_peer", "unreliable_ordered", "call_remote")
 func _receive_command(sequence: int, tick: int, delta_time: float, data: Dictionary) -> void:
 	if not multiplayer.is_server(): return # Only peer -> server
+	if _is_paused: return # Shouldn't queue commands while paused
 	var peer := multiplayer.get_remote_sender_id()
 	# Check if command is stale or duplicate
 	if _last_command_sequence.get(peer, 0) >= sequence: return
@@ -452,7 +463,6 @@ func _timer_reset() -> void:
 @rpc("any_peer", "reliable", "call_remote")
 func _request_time(client_send_time: int) -> void:
 	if not multiplayer.is_server(): return # Only peer -> server
-	## TODO: account for RTT
 	var peer := multiplayer.get_remote_sender_id()
 	_receive_time.rpc_id(peer,
 		_tick_rate,
@@ -472,6 +482,45 @@ func _receive_time(server_rate: int, accumulator: int, tick: int, client_send_ti
 	var total_usecs := (tick * _usecs_per_tick) + accumulator + maxi(0, rtt_usec / 2)
 	_current_tick = total_usecs / _usecs_per_tick
 	_usec_accumulator = total_usecs % _usecs_per_tick
+
+func set_paused(paused: bool) -> void:
+	# Clients cannot pause
+	if not multiplayer.is_server()\
+	|| multiplayer.multiplayer_peer is OfflineMultiplayerPeer or multiplayer.multiplayer_peer == null:
+		push_warning("Clients cannot pause simulation")
+		return
+	_is_paused = paused
+	# Don't allow commands captured before the pause to execute afterward
+	if paused:
+		_pending_commands.clear()
+	# Server and clients need to agree on the exact pause time
+	_sync_pause_state.rpc(
+		_is_paused,
+		_current_tick,
+		_usec_accumulator
+	)
+	
+	pause_state_changed.emit(paused)
+
+@rpc("authority", "reliable", "call_remote")
+func _sync_pause_state(paused: bool, server_tick: int, server_accumulator: int) -> void:
+	if multiplayer.is_server(): return # Only server -> peers
+	_is_paused = paused
+	
+	# Match server clock
+	if paused: # Time is fixed, no need to account for RTT
+		_current_tick = server_tick
+		_usec_accumulator = server_accumulator
+	else: # Must send request to account for RTT when unpausing
+		_request_time.rpc_id(1, Time.get_ticks_usec())
+	
+	# Clear history
+	_command_history.fill(null)
+	_state_history.fill(null)
+	_pending_snapshot = null
+	_render_offsets.clear()
+	
+	pause_state_changed.emit(paused)
 
 ## TODO: Add interpolation handling (planned NetInterpolator node will read offsets
 ## plus buffered snapshots, to delay by interpolation_delay_msec to smooth rendering)

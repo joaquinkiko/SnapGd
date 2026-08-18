@@ -55,10 +55,14 @@ func _input(event: InputEvent) -> void:
 	# Grab/release camera
 	if event is InputEventKey and event.keycode == KEY_ESCAPE:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	elif event is InputEventKey and event.keycode == KEY_P and event.is_pressed():
+		SnapAPI.set_paused(!SnapAPI.is_paused)
 	elif event is InputEventMouseButton and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	if Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
 		return # Ignore input if not currently in focus
+	
+	if SnapAPI.is_paused: return
 	
 	# Get look direction
 	if event is InputEventMouseMotion:
@@ -123,7 +127,7 @@ func _simulate(command: SnapCommand) -> void:
 	horizontal_velocity = horizontal_velocity.lerp(target_velocity, clamp(smoothing * delta, 0.0, 1.0))
 	velocity = Vector3(horizontal_velocity.x, gravity_velocity, horizontal_velocity.z)
 	# Update animation
-	_update_animation(is_on_floor(), horizontal_velocity.length())
+	_update_animation(horizontal_velocity.length())
 	# Apply movement
 	_apply_motion(delta)
 
@@ -132,7 +136,7 @@ func _rotate_camera(mouse_delta: Vector2) -> void:
 	camera_pitch -= mouse_delta.y * MOUSE_SENSITIVITY
 	camera_pitch = clamp(camera_pitch, -PITCH_LIMIT, PITCH_LIMIT)
 
-func _update_animation(on_floor: bool, horizontal_speed: float) -> void:
+func _update_animation(horizontal_speed: float) -> void:
 	if not multiplayer.is_server(): return
 	if not _is_on_floor():
 		if _jump_animation_state:
