@@ -8,12 +8,11 @@
 
 SnapGd is a networking addon for handling smooth gameplay and synchronization for fast-paced multiplayer.
 
-## Goals
+## Features
 
 - **Time synchronization** between players
 - **Client prediction and Server reconciliation** for responsive gameplay
 - **Interpolation** for smooth synchronization regardless of ping
-- **Delta-compression** for low bandwidth cost
 - **Lag compensation** for fast-paced gameplay
 
 ## Install
@@ -22,14 +21,22 @@ After adding the latest [Release](../../releases/latest) to your project, enable
  
 > **Note:** SnapGd is still in early development (WIP). APIs and features may change before a stable release.
 
+## Usage
+
+See [How To Use](docs/usage.md) for full guide.
+
+A demo is also provided to show an example of how it can be used.
+
+Note that SnapGd is design with Server-Authoritative networking in mind, and not pure P2P, though there is support for Client-Server networking (where the server is a player themselves).
+
 ## Roadmap
 
-- [ ]  Interpolation of remote properties
-- [ ]  Smoothing of reconciliation
-- [ ]  Lag compensated events
-- [ ]  API documentation
+- [ ]  Redundant sending of commands to improve accuracy of inputs
+- [ ]  Byte-encoding to save bandwidth
 - [ ]  Delta-compression
 - [ ]  Priority and interest management
+- [ ]  Command and event bundling to reduce packets
+- [ ]  Improved physics support
 
 ## License
  
