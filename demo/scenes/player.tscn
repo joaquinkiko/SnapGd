@@ -5,6 +5,7 @@
 [ext_resource type="Script" uid="uid://dgake6qgihm55" path="res://addons/snapgd/nodes/net_interpolator.gd" id="4_sh2ex"]
 [ext_resource type="Script" uid="uid://bseev2otmhm4i" path="res://addons/snapgd/nodes/net_event.gd" id="5_s1jr8"]
 [ext_resource type="PackedScene" uid="uid://cgxwnhxus1cfr" path="res://demo/assets/3DGodotRobot.glb" id="5_vyyd1"]
+[ext_resource type="Script" uid="uid://cf1b7p4u6g4yi" path="res://addons/snapgd/nodes/net_compensator.gd" id="6_ynbcj"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_8483k"]
 height = 1.8
@@ -76,6 +77,13 @@ metadata/_custom_type_script = "uid://dgake6qgihm55"
 script = ExtResource("5_s1jr8")
 root = NodePath("..")
 events = PackedStringArray("event_speak")
+lag_compensated = true
 metadata/_custom_type_script = "uid://bseev2otmhm4i"
+
+[node name="NetCompensator" type="Node" parent="." unique_id=153009323 node_paths=PackedStringArray("root")]
+script = ExtResource("6_ynbcj")
+root = NodePath("..")
+compensated_properties = PackedStringArray(".:position")
+metadata/_custom_type_script = "uid://cf1b7p4u6g4yi"
 
 [editable path="3DGodotRobot"]

@@ -87,6 +87,8 @@ var _last_received_client_event_sequence: Dictionary[int, int]
 var _net_nodes: Array[NetNode]
 ## All registered [NetEvent]s to be handled.
 var _net_events: Array[NetEvent]
+## All registered [NetCompensator]s to be handled.
+var _net_compensators: Array[NetCompensator]
 ## Current outbound event sequence.
 var _event_sequence: int = 1
 ## Events pending broadcast on next tick, sorted as {sequence : event}.
@@ -630,7 +632,7 @@ func _receive_events(node_path: NodePath, sequence: int, tick: int, event_name: 
 		event.sequence = _event_sequence
 		_event_sequence += 1
 		# Play event locally
-		event.node.apply_event(event.event_name, event.args, event.caller)
+		event.node.apply_event(event.event_name, event.args, event.caller, tick)
 		# Prep event for relay
 		_pending_out_events[event.sequence] = event
 		# Check for queued events
@@ -642,7 +644,7 @@ func _receive_events(node_path: NodePath, sequence: int, tick: int, event_name: 
 			event.sequence = _event_sequence
 			_event_sequence += 1
 			# Play event locally
-			event.node.apply_event(event.event_name, event.args, event.caller)
+			event.node.apply_event(event.event_name, event.args, event.caller, tick)
 			# Prep event for relay
 			_pending_out_events[_event_sequence] = event
 			expected_sequence += 1
@@ -666,13 +668,13 @@ func _relay_events(node_path: NodePath, sequence: int, tick: int, event_name: St
 		# Play instantly and update sequence
 		# Events relayed from self won't be played but should still be handled for sequencing
 		if caller != multiplayer.get_unique_id(): # Don't play if relayed from self
-			event.node.apply_event(event.event_name, event.args, event.caller)
+			event.node.apply_event(event.event_name, event.args, event.caller, tick)
 		_last_processed_event_sequence = sequence
 		# Play cached sequences forward as far as possible
 		var next_sequence := _last_processed_event_sequence + 1
 		while _future_queued_events.has(1) and _future_queued_events[1].has(next_sequence):
 			if caller != multiplayer.get_unique_id(): # Don't play if relayed from self
-				_future_queued_events[1][next_sequence].node.apply_event(event.event_name, event.args, event.caller)
+				_future_queued_events[1][next_sequence].node.apply_event(event.event_name, event.args, event.caller, tick)
 			_last_processed_event_sequence = next_sequence
 			_future_queued_events[1].erase(next_sequence) # Consume pending sequence
 			next_sequence += 1
@@ -681,6 +683,25 @@ func _relay_events(node_path: NodePath, sequence: int, tick: int, event_name: St
 	else: # Future sequence, arrived out-of-order
 		if !_future_queued_events.has(1): _future_queued_events[1] = {}
 		_future_queued_events[1][sequence] = event # Queue for later
+
+## Registers [param node] for handling. Typically called when it enters tree.
+func register_net_compensator(node: NetCompensator) -> void:
+	if !_net_compensators.has(node):
+		_net_compensators.append(node)
+
+## Unregisters [param node] from handling. Typically called when it exits tree.
+func unregister_net_compensator(node: NetCompensator) -> void:
+	_net_compensators.erase(node)
+
+## Rewinds all [member _net_compensator]s to [param tick].
+func rewind_compensators(tick: int) -> void:
+	for comp in _net_compensators:
+		comp.rewind_to(tick)
+
+## Restores all [member _net_compensator]s after [method rewind_compensators] is called.
+func restore_compensators() -> void:
+	for comp in _net_compensators:
+		comp.restore()
 
 ## TODO: Add delta compression handling (Snapshot.baseline_tick will
 ## eventually be used to compress states_data in _receive_snapshot

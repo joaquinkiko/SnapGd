@@ -56,12 +56,17 @@ func call_event(event_name: StringName, args: Array = []) -> void:
 	_pending.append([event_name, args])
  
 ## Applies event locally only. Doesn't self validate, use [function has_permission] beforehand.
-func apply_event(event_name: StringName, args: Array, caller: int) -> void:
+func apply_event(event_name: StringName, args: Array, caller: int, tick: int) -> void:
 	if !events.has(event_name):
 		push_warning("Event '%s' cannot be found in approved events list"%event_name)
 		return
 	current_event_caller = caller
-	root.callv(event_name, args)
+	if caller == multiplayer.get_unique_id():
+		root.callv(event_name, args)
+	else: # Lag-compensation is only needed if we aren't the caller
+		SnapAPI.rewind_compensators(tick)
+		root.callv(event_name, args)
+		SnapAPI.restore_compensators()
 	current_event_caller = -1
  
 ## Grabs list of pending events, clearing [memebr _pending] in the process.
