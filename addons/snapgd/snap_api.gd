@@ -104,6 +104,8 @@ var _future_queued_events: Dictionary[int, Dictionary]
 ## This is server sequence for relayed events, not individual client
 ## sequence for events they generate (see [emember _last_received_client_event_sequence]).
 var _last_acked_event_sequence: Dictionary[int, int]
+## Events queued to be processed on future tick matching, or newer than their tick.
+var upcoming_events: Array[SnapEvent]
 
 ## Current simulation tick
 var current_tick: int:
@@ -237,6 +239,15 @@ func _on_client_tick(delta: float) -> void:
 		command.delta_time,
 		command.data
 	)
+	# Run through events, ensuring only current or old ticks are simulated
+	var store_for_future_tick: Array[SnapEvent] = []
+	for event in upcoming_events:
+		if event.tick > _current_tick:
+			store_for_future_tick.append(event)
+			continue # Don't erase yet
+		# Ready to be simulated
+		event.node.apply_event(event.event_name, event.args, event.caller, event.tick)
+	upcoming_events = store_for_future_tick # Clean up queue with only future events
 	# Send pending events
 	for sequence in _collect_events():
 		if sequence < _last_acked_event_sequence.get(1, 0):
@@ -272,6 +283,29 @@ func _on_server_tick(delta: float) -> void:
 			simulate_command.emit(command)
 			# Update latest command processed for peer
 			_last_command_sequence[peer] = command.sequence
+	# Run through events, ensuring only current or old ticks are simulated
+	var store_for_future_tick: Array[SnapEvent] = []
+	for event in upcoming_events:
+		if event.tick > _current_tick:
+			store_for_future_tick.append(event)
+			continue # Don't erase yet
+		# Ready to be simulated
+		event.node.apply_event(event.event_name, event.args, event.caller, event.tick)
+	upcoming_events = store_for_future_tick # Clean up queue with only future events
+	# Send pending events
+	_collect_events() # collect only once prior to loop
+	for peer in multiplayer.get_peers():
+		for sequence in _pending_out_events:
+			if sequence < _last_acked_event_sequence.get(peer, 0):
+				continue # Don't resent already acked sequence
+			_relay_events.rpc_id(peer,
+				_pending_out_events[sequence].node.get_path(),
+				sequence,
+				_pending_out_events[sequence].tick,
+				_pending_out_events[sequence].event_name,
+				_pending_out_events[sequence].args,
+				_pending_out_events[sequence].caller,
+			)
 	# Client-Server simulates their own commands
 	if is_client_server:
 		var command := SnapCommand.new()
@@ -295,20 +329,6 @@ func _on_server_tick(delta: float) -> void:
 				snapshot.baseline_tick,
 				snapshot.last_command_sequence,
 				_states_to_array(snapshot.states)
-			)
-	# Send pending events
-	_collect_events() # collect only once prior to loop
-	for peer in multiplayer.get_peers():
-		for sequence in _pending_out_events:
-			if sequence < _last_acked_event_sequence.get(peer, 0):
-				continue # Don't resent already acked sequence
-			_relay_events.rpc_id(peer,
-				_pending_out_events[sequence].node.get_path(),
-				sequence,
-				_pending_out_events[sequence].tick,
-				_pending_out_events[sequence].event_name,
-				_pending_out_events[sequence].args,
-				_pending_out_events[sequence].caller,
 			)
 
 func _on_offline_tick(delta: float) -> void:
@@ -632,7 +652,7 @@ func _receive_events(node_path: NodePath, sequence: int, tick: int, event_name: 
 		event.sequence = _event_sequence
 		_event_sequence += 1
 		# Play event locally
-		event.node.apply_event(event.event_name, event.args, event.caller, tick)
+		upcoming_events.append(event)
 		# Prep event for relay
 		_pending_out_events[event.sequence] = event
 		# Check for queued events
@@ -644,7 +664,7 @@ func _receive_events(node_path: NodePath, sequence: int, tick: int, event_name: 
 			event.sequence = _event_sequence
 			_event_sequence += 1
 			# Play event locally
-			event.node.apply_event(event.event_name, event.args, event.caller, tick)
+			upcoming_events.append(event)
 			# Prep event for relay
 			_pending_out_events[_event_sequence] = event
 			expected_sequence += 1
@@ -668,13 +688,13 @@ func _relay_events(node_path: NodePath, sequence: int, tick: int, event_name: St
 		# Play instantly and update sequence
 		# Events relayed from self won't be played but should still be handled for sequencing
 		if caller != multiplayer.get_unique_id(): # Don't play if relayed from self
-			event.node.apply_event(event.event_name, event.args, event.caller, tick)
+			upcoming_events.append(event)
 		_last_processed_event_sequence = sequence
 		# Play cached sequences forward as far as possible
 		var next_sequence := _last_processed_event_sequence + 1
 		while _future_queued_events.has(1) and _future_queued_events[1].has(next_sequence):
 			if caller != multiplayer.get_unique_id(): # Don't play if relayed from self
-				_future_queued_events[1][next_sequence].node.apply_event(event.event_name, event.args, event.caller, tick)
+				upcoming_events.append(_future_queued_events[1][next_sequence])
 			_last_processed_event_sequence = next_sequence
 			_future_queued_events[1].erase(next_sequence) # Consume pending sequence
 			next_sequence += 1

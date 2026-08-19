@@ -51,7 +51,14 @@ func call_event(event_name: StringName, args: Array = []) -> void:
 		push_warning("Attempting to call an event that local user doesn't have permission to")
 		return
 	# Call locally for responsiveness
-	root.callv(event_name, args)
+	var event := SnapEvent.new()
+	event.node = self
+	event.event_name = event_name
+	event.args = args
+	event.tick = SnapAPI.current_tick + 1 # Pending events simulate during next tick
+	event.caller = multiplayer.get_unique_id()
+	event.sequence = -1 # This is a local call, with no remote sequencing
+	SnapAPI.upcoming_events.append(event)
 	# Append event to be sent out to network
 	_pending.append([event_name, args])
  
