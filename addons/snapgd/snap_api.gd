@@ -64,6 +64,9 @@ var _pending_snapshot: Snapshot
 ## Leftover visual-only properties after soft correction.
 ## Decays toward empty every client tick.
 var render_offsets: Dictionary[StringName, Variant]
+## Sequence of the last event processed by the client.
+## NOT last event received, as some events may be queued for later.
+var _last_processed_event_sequence: int
 
 # Server-side data
 
@@ -73,11 +76,32 @@ var is_client_server: bool = true
 var _pending_commands: Dictionary[int, Array]
 ## Last command sequence processed (peer : sequence)
 var _last_command_sequence: Dictionary[int, int]
+## Client sequence of last event received from remote peer, sorted {peer : sequence}.
+## This is the client's sequence for events they generate, not to be confused with
+## server sequence for relayed events (see [member _last_acked_event_sequence]).
+var _last_received_client_event_sequence: Dictionary[int, int]
 
 # Shared server and client data
 
 ## All registered [NetNode]s to be handled.
 var _net_nodes: Array[NetNode]
+## All registered [NetEvent]s to be handled.
+var _net_events: Array[NetEvent]
+## Current outbound event sequence.
+var _event_sequence: int = 1
+## Events pending broadcast on next tick, sorted as {sequence : event}.
+## Sequences only cleared once they are acknowledged by all receivers.
+## This means they may be sent redundently.
+var _pending_out_events: Dictionary[int, SnapEvent]
+## Events queued for processing, sorted {peer : {sequence : event}}.
+## This is used for future events received out of order (example:
+## seq 3, received before seq 2 has been received).
+var _future_queued_events: Dictionary[int, Dictionary]
+## Last acknowledged event sequence sorted {peer : sequence}.
+## This ensures that peers do not skip a sequence number.
+## This is server sequence for relayed events, not individual client
+## sequence for events they generate (see [emember _last_received_client_event_sequence]).
+var _last_acked_event_sequence: Dictionary[int, int]
 
 ## Current simulation tick
 var current_tick: int:
@@ -211,6 +235,19 @@ func _on_client_tick(delta: float) -> void:
 		command.delta_time,
 		command.data
 	)
+	# Send pending events
+	for sequence in _collect_events():
+		if sequence < _last_acked_event_sequence.get(1, 0):
+			continue # Don't resent already acked sequence
+		_receive_events.rpc_id(1,
+			_pending_out_events[sequence].node.get_path(),
+			_pending_out_events[sequence].sequence,
+			_pending_out_events[sequence].tick,
+			_pending_out_events[sequence].event_name,
+			_pending_out_events[sequence].args,
+			_last_processed_event_sequence,
+			_pending_out_events[sequence].caller
+		)
 	# Predict command
 	_simulate_command(command)
 	# Store in state history
@@ -256,6 +293,20 @@ func _on_server_tick(delta: float) -> void:
 				snapshot.baseline_tick,
 				snapshot.last_command_sequence,
 				_states_to_array(snapshot.states)
+			)
+	# Send pending events
+	_collect_events() # collect only once prior to loop
+	for peer in multiplayer.get_peers():
+		for sequence in _pending_out_events:
+			if sequence < _last_acked_event_sequence.get(peer, 0):
+				continue # Don't resent already acked sequence
+			_relay_events.rpc_id(peer,
+				_pending_out_events[sequence].node.get_path(),
+				sequence,
+				_pending_out_events[sequence].tick,
+				_pending_out_events[sequence].event_name,
+				_pending_out_events[sequence].args,
+				_pending_out_events[sequence].caller,
 			)
 
 func _on_offline_tick(delta: float) -> void:
@@ -524,6 +575,112 @@ func _sync_pause_state(paused: bool, server_tick: int, server_accumulator: int) 
 	render_offsets.clear()
 	
 	pause_state_changed.emit(paused)
+
+## Registers [param node] for handling. Typically called when it enters tree.
+func register_net_event(node: NetEvent) -> void:
+	if !_net_events.has(node):
+		_net_events.append(node)
+
+## Unregisters [param node] from handling. Typically called when it exits tree.
+func unregister_net_event(node: NetEvent) -> void:
+	_net_events.erase(node)
+
+## Collects all pending events and adds them to [member _pending_out_events].
+func _collect_events() -> Dictionary[int, SnapEvent]:
+	for net_event in _net_events:
+		for pending_event in net_event.consume_pending():
+			var event := SnapEvent.new()
+			event.sequence = _event_sequence
+			_event_sequence += 1
+			event.tick = _current_tick
+			event.node = net_event
+			event.event_name = pending_event[0]
+			event.args = pending_event[1]
+			event.caller = multiplayer.get_unique_id()
+			_pending_out_events[event.sequence] = event
+	return _pending_out_events
+
+@rpc("any_peer", "unreliable_ordered", "call_remote")
+func _receive_events(node_path: NodePath, sequence: int, tick: int, event_name: StringName, args: Array, ack_sequence: int, caller: int) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	_last_acked_event_sequence[peer] = ack_sequence
+	# Rebuild SnapEvent from data
+	var event := SnapEvent.new()
+	event.sequence = -1 # Wait to apply sequence until validated and ready
+	event.tick = tick
+	event.node = get_node(node_path)
+	event.event_name = event_name
+	event.args = args
+	event.caller = caller
+	
+	# Validate event request
+	if not event.node.has_permission(peer):
+		return # Silent return if not permission
+	
+	# Check sequencing
+	# We will only accept the next sequence from that peer. Outdated sequences will be ignored.
+	# Sequences newer than the next should be queued until we've received all sequences inbetween.
+	# This ensures events play in the exact order of execution, and that no events are skipped.
+	var expected_sequence: int = _last_received_client_event_sequence.get(peer, 0) + 1
+	if sequence == expected_sequence:
+		# Ack peer sequence
+		_last_received_client_event_sequence[peer] = sequence
+		expected_sequence += 1
+		# Assign event sequencing and increment
+		event.sequence = _event_sequence
+		_event_sequence += 1
+		# Play event locally
+		event.node.apply_event(event.event_name, event.args, event.caller)
+		# Prep event for relay
+		_pending_out_events[event.sequence] = event
+		# Check for queued events
+		while _future_queued_events.has(peer) and _future_queued_events[peer].has(expected_sequence):
+			_last_received_client_event_sequence[peer] = expected_sequence
+			event = _future_queued_events[peer][expected_sequence]
+			_future_queued_events.erase(expected_sequence) # Remove from queue
+			# Assign event sequencing and increment
+			event.sequence = _event_sequence
+			_event_sequence += 1
+			# Play event locally
+			event.node.apply_event(event.event_name, event.args, event.caller)
+			# Prep event for relay
+			_pending_out_events[_event_sequence] = event
+			expected_sequence += 1
+	elif sequence < expected_sequence: # Outdated sequence, ignore
+		return
+	else: # Future sequence, arrived out of order
+		_future_queued_events[peer][sequence] = event # Queue for later
+
+@rpc("authority", "unreliable_ordered", "call_remote")
+func _relay_events(node_path: NodePath, sequence: int, tick: int, event_name: StringName, args: Array, caller: int) -> void:
+	# Rebuild SnapEvent from data
+	var event := SnapEvent.new()
+	event.sequence = sequence
+	event.tick = tick
+	event.node = get_node(node_path)
+	event.event_name = event_name
+	event.args = args
+	event.caller = caller
+	# Check event sequence to determine handling
+	if sequence == _last_processed_event_sequence + 1: # Next even in sequence
+		# Play instantly and update sequence
+		# Events relayed from self won't be played but should still be handled for sequencing
+		if caller != multiplayer.get_unique_id(): # Don't play if relayed from self
+			event.node.apply_event(event.event_name, event.args, event.caller)
+		_last_processed_event_sequence = sequence
+		# Play cached sequences forward as far as possible
+		var next_sequence := _last_processed_event_sequence + 1
+		while _future_queued_events.has(1) and _future_queued_events[1].has(next_sequence):
+			if caller != multiplayer.get_unique_id(): # Don't play if relayed from self
+				_future_queued_events[1][next_sequence].node.apply_event(event.event_name, event.args, event.caller)
+			_last_processed_event_sequence = next_sequence
+			_future_queued_events[1].erase(next_sequence) # Consume pending sequence
+			next_sequence += 1
+	elif sequence < _last_processed_event_sequence: # Old sequence (junk it)
+		return 
+	else: # Future sequence, arrived out-of-order
+		if !_future_queued_events.has(1): _future_queued_events[1] = {}
+		_future_queued_events[1][sequence] = event # Queue for later
 
 ## TODO: Add delta compression handling (Snapshot.baseline_tick will
 ## eventually be used to compress states_data in _receive_snapshot

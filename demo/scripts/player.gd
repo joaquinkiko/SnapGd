@@ -70,6 +70,9 @@ func _input(event: InputEvent) -> void:
 	# Get jump action
 	if Input.is_action_just_pressed("ui_accept"):
 		should_jump = true
+	# Get speak action
+	if Input.is_action_just_pressed("ui_focus_next"): # (Tab)
+		$NetEvent.call_event(&"event_speak", ["Server" if multiplayer.is_server() else "Client"])
 
 func _gather_input(_command: SnapCommand) -> void:
 	if not is_multiplayer_authority(): return
@@ -178,3 +181,7 @@ func _apply_motion(delta: float) -> void:
 				break
 	else:
 		move_and_slide()
+
+# Returns "speaker:listener"
+func event_speak(word: String) -> void:
+	print(word, ":", "Server" if multiplayer.is_server() else "Client")

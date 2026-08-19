@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://hj0hcpr1jg4f" path="res://demo/scripts/player.gd" id="1_r1htb"]
 [ext_resource type="Script" uid="uid://bp3yrvsyrbven" path="res://addons/snapgd/nodes/net_node.gd" id="3_m7rvx"]
 [ext_resource type="Script" uid="uid://dgake6qgihm55" path="res://addons/snapgd/nodes/net_interpolator.gd" id="4_sh2ex"]
+[ext_resource type="Script" uid="uid://bseev2otmhm4i" path="res://addons/snapgd/nodes/net_event.gd" id="5_s1jr8"]
 [ext_resource type="PackedScene" uid="uid://cgxwnhxus1cfr" path="res://demo/assets/3DGodotRobot.glb" id="5_vyyd1"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_8483k"]
@@ -70,5 +71,11 @@ net_node = NodePath("..")
 interpolated_properties = PackedStringArray(".:position", ".:camera_pitch", ".:camera_yaw")
 smoothed_properties = PackedStringArray(".:position", ".:camera_pitch", ".:camera_yaw")
 metadata/_custom_type_script = "uid://dgake6qgihm55"
+
+[node name="NetEvent" type="Node" parent="." unique_id=1965993080 node_paths=PackedStringArray("root")]
+script = ExtResource("5_s1jr8")
+root = NodePath("..")
+events = PackedStringArray("event_speak")
+metadata/_custom_type_script = "uid://bseev2otmhm4i"
 
 [editable path="3DGodotRobot"]
