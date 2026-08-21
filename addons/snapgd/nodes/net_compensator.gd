@@ -8,6 +8,8 @@ class_name NetCompensator extends Node
 @export var compensated_properties: PackedStringArray
 ## When true, compensation will only occur on server-side.
 @export var server_only: bool = true
+## How far back (in msec) lag-compensation rewinding is allowed.
+@export_range(100, 300, 1) var max_rewind_msec: float = 250.0
  
 ## Per-tick history of old [member compensated_properties] values.
 ## TODO: We should make this a ring-buffer
@@ -40,8 +42,8 @@ func _record(tick: int) -> void:
 		if node == null: continue
 		values[prop] = node.get_indexed(parts[1])
 	_history.append({"tick": tick, "values": values})
-	# Erase ticks older than [member SnapAPI.max_rewind_msec]
-	var min_tick: int = tick - roundi(SnapAPI.max_rewind_msec / 1000.0 * SnapAPI.tick_rate)
+	# Erase ticks older than [member max_rewind_msec]
+	var min_tick: int = tick - roundi(max_rewind_msec / 1000.0 * SnapAPI.tick_rate)
 	while _history.size() > 1 and _history[0]["tick"] < min_tick:
 		_history.pop_front()
  

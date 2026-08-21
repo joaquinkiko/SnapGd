@@ -9,14 +9,6 @@ const _MAX_TICK_RATE := 128
 const _DEFAULT_SNAPSHOT_RATE := 60
 const _MIN_SNAPSHOT_RATE := 30
 const _MAX_SNAPSHOT_RATE := 128
-## Interpolation delay in msec
-const _DEFAULT_LERP_DELAY := 100.0
-const _MIN_LERP_DELAY := 50.0
-const _MAX_LERP_DELAY := 150.0
-## Max lag-compensation rewinding in msec
-const _DEFAULT_REWIND_TIME := 250.0
-const _MIN_REWIND_TIME := 200.0
-const _MAX_REWIND_TIME := 300.0
 ## Sequence buffer size for outbound packets
 const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
@@ -115,18 +107,6 @@ var current_tick: int:
 var _current_tick: int = 0
 
 # Configuration data
-
-## How far in past (in msec) remote peers are rendered.
-var interpolation_delay_msec: float:
-	get: return _interpolation_delay_msec
-	set(value): _interpolation_delay_msec = clampf(value, _MIN_LERP_DELAY, _MAX_LERP_DELAY)
-var _interpolation_delay_msec: float = _DEFAULT_LERP_DELAY
-
-## How far back (in msec) server allows for lag-compensation rewinding.
-var max_rewind_msec: float:
-	get: return _max_rewind_msec
-	set(value): _max_rewind_msec = clampf(value, _MIN_REWIND_TIME, _MAX_REWIND_TIME)
-var _max_rewind_msec: float = _DEFAULT_REWIND_TIME
 
 ## How often Snapshots should be sent from server to peers.
 var snapshot_rate: float:

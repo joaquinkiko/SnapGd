@@ -10,6 +10,8 @@ const _BUFFER_SIZE := 32
 @export var interpolated_properties: PackedStringArray
 ## Properties to locally smooth after reconciliation (must match [NetNode] states).
 @export var smoothed_properties: PackedStringArray
+## How far in past (in msec) remote peers are interpolated.
+@export_range(50, 150, 1) var interpolation_delay_msec: float = 100
  
 ## Stores received snapshots to interpolate over.
 var _snapshot_buffer: Array[Snapshot] = []
@@ -41,7 +43,7 @@ func _update() -> void:
 func _apply_interpolation() -> void:
 	if interpolated_properties.is_empty() || _snapshot_buffer.size() < 2: return
 	# Get number of ticks to offset interpolation
-	var delay_ticks: float = SnapAPI.interpolation_delay_msec / 1000.0 * SnapAPI.tick_rate
+	var delay_ticks: float = interpolation_delay_msec / 1000.0 * SnapAPI.tick_rate
 	var render_tick: float = SnapAPI.current_tick - delay_ticks
 	# Get reference snapshots
 	var from: Snapshot = null
