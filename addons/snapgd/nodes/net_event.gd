@@ -52,7 +52,7 @@ func call_event(event_name: StringName, args: Array = []) -> void:
 		return
 	# Call locally for responsiveness
 	var event := SnapEvent.new()
-	event.node = self
+	event.node_path = self.get_path()
 	event.event_name = event_name
 	event.args = args
 	event.tick = SnapAPI.current_tick + 1 # Pending events simulate during next tick

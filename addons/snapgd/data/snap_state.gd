@@ -4,7 +4,7 @@ class_name SnapState extends SnapEncodable
 ##
 var sequence: int
 ##
-var data: Dictionary[StringName, Variant]
+var data: Dictionary # Sorted [StringName, Variant]
 
 func encode() -> PackedByteArray:
 	var raw := StreamPeerBuffer.new()
