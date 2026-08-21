@@ -1,14 +1,6 @@
 ## Global API for SnapGd
 extends Node
 
-## Ticks-per-second
-const _DEFAULT_TICK_RATE := 60
-const _MIN_TICK_RATE := 30
-const _MAX_TICK_RATE := 128
-## Snapshots-per-second
-const _DEFAULT_SNAPSHOT_RATE := 60
-const _MIN_SNAPSHOT_RATE := 30
-const _MAX_SNAPSHOT_RATE := 128
 ## Sequence buffer size for outbound packets
 const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
@@ -16,8 +8,6 @@ const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
 const _RECONCILIATION_THRESHOLD := 1.0
 ## Prediction errors below this should be ignored (assume floating point noise)
 const _RECONCILIATION_EPSILON := 0.001
-## Max ticks to process per frame to prevent death loop
-const _MAX_TICKS_PER_FRAME := 8
 
 ## Emitted once before any ticks are processed this frame. Any data
 ## that doesn't change more than once per frame should be sampled here.
@@ -113,11 +103,11 @@ var snapshot_rate: float:
 	get:
 		return _tick_rate / float(maxi(1, _ticks_per_snapshot))
 	set(value):
-		var rate := clampf(value, _MIN_SNAPSHOT_RATE, _MAX_SNAPSHOT_RATE)
+		var rate := maxf(1, value)
 		_ticks_per_snapshot = maxi(1, roundi(_tick_rate / maxf(1.0, rate)))
 var _ticks_per_snapshot: int = roundi(
-	1e6 / ceili(1e6 / _DEFAULT_TICK_RATE) #_tick_rate
-	/ maxf(1.0, _DEFAULT_SNAPSHOT_RATE)
+	1e6 / ceili(1e6 / ProjectSettings.get_setting("SnapAPI/tick_rate", 60)) #_tick_rate
+	/ maxf(1.0, ProjectSettings.get_setting("SnapAPI/snapshot_rate", 30))
 	)
 
 ## Simulation tick rate in ticks per second
@@ -130,18 +120,25 @@ var tick_rate: float:
 			_tick_rate = value
 var _tick_rate: float:
 	get:
-		return 1e6 / float(maxi(1, _usecs_per_tick))
+		return 1e6 / float(maxf(1, _usecs_per_tick))
 	set(value):
-		var rate := clampf(value, _MIN_TICK_RATE, _MAX_TICK_RATE)
+		var rate := maxi(1, value)
 		_usecs_per_tick = maxi(1, ceili(1e6 / rate))
 		_tick_delta = _usecs_per_tick / 1e6
+
+## Max ticks that may be processed per frame
+var max_ticks_per_frame: int:
+	get: return _max_ticks_per_frame
+	set(value):
+		_max_ticks_per_frame = maxi(1, value)
+var _max_ticks_per_frame: int = ProjectSettings.get_setting("SnapAPI/max_tick_per_frame", 8)
 
 # Time calculation data
 
 ## Current mircoseconds between ticks
-var _usecs_per_tick: int = ceili(1e6 / _DEFAULT_TICK_RATE)
+var _usecs_per_tick: int = ceili(1e6 / ProjectSettings.get_setting("SnapAPI/tick_rate", 60))
 ## Current seconds between ticks
-var _tick_delta: float = ceili(1e6 / _DEFAULT_TICK_RATE) / 1e6
+var _tick_delta: float = ceili(1e6 / ProjectSettings.get_setting("SnapAPI/tick_rate", 60)) / 1e6
 ## Time accumulator in mircoseconds
 var _usec_accumulator: int
 ## Carryover from delta float, to help keep precision
@@ -181,7 +178,7 @@ func _handle_time(delta) -> void:
 func _process_ticks() -> void:
 	if _usec_accumulator < _usecs_per_tick: return # Ignore if no ticks queued
 	pre_tick_loop.emit()
-	for t in mini(_usec_accumulator / _usecs_per_tick, _MAX_TICKS_PER_FRAME):
+	for t in mini(_usec_accumulator / _usecs_per_tick, max_ticks_per_frame):
 		pre_tick.emit(_current_tick)
 		_usec_accumulator -= _usecs_per_tick
 		_current_tick += 1
