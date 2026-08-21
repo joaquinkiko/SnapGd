@@ -16,8 +16,8 @@ static var _double_floats: bool = OS.has_feature("double")
 func encode() -> PackedByteArray
 
 @abstract
-## Decodes data from [method encode].
-func decode(bytes: PackedByteArray) -> void
+## Decodes data from [method encode]. Both mutates self, and returns self.
+func decode(bytes: PackedByteArray) -> SnapEncodable
 
 ## Writes interger to buffer
 static func write_int(buf: StreamPeerBuffer, v: int) -> void:
