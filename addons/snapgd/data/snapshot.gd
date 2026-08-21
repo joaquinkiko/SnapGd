@@ -11,7 +11,7 @@ var last_command_sequence: int
 var states: Array[SnapState]
 
 func encode() -> PackedByteArray:
-	var raw: StreamPeerBuffer
+	var raw := StreamPeerBuffer.new()
 	write_int(raw, server_tick)
 	write_variant(raw, baseline_tick)
 	write_variant(raw, last_command_sequence)

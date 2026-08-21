@@ -8,10 +8,10 @@ var tick: int
 ##
 var delta_time: float
 ##
-var data: Dictionary[StringName, Variant]
+var data: Dictionary # Sorted [StringName, Variant]
 
 func encode() -> PackedByteArray:
-	var raw: StreamPeerBuffer
+	var raw := StreamPeerBuffer.new()
 	write_int(raw, sequence)
 	write_int(raw, tick)
 	write_float(raw, delta_time)

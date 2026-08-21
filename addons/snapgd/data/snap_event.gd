@@ -16,7 +16,7 @@ var event_name: StringName
 var args: Array
 
 func encode() -> PackedByteArray:
-	var raw: StreamPeerBuffer
+	var raw := StreamPeerBuffer.new()
 	write_int(raw, sequence)
 	write_int(raw, tick)
 	write_int(raw, caller)
