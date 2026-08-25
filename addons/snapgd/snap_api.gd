@@ -19,15 +19,6 @@ signal post_tick_loop
 signal pre_tick(tick: int)
 ## Emitted after a single tick has been fully simulated.
 signal post_tick(tick: int)
-## Emitted on the client right before a new [SnapCommand] is captured.
-## Client input should be sampled during this time.
-signal sample_input(command: SnapCommand)
-## Emitted whenever a peer-owned command should be simulated (client
-## prediction, or server-side authoritative simulation of a peer's command).
-signal simulate_command(command: SnapCommand)
-## Emitted once per server tick for objects that aren't owned by any peer
-## (e.g. moving platforms, projectiles, NPCs).
-signal simulate_world(delta: float)
 ## Emitted whenever paused state changes
 signal pause_state_changed(paused: bool)
 ## Emitted on client whenever a new snapshot is received (and before handled)
@@ -205,7 +196,8 @@ func _on_client_tick(delta: float) -> void:
 	command.tick = _current_tick
 	command.delta_time = delta
 	# Ensure input data is populated before capturing commands
-	sample_input.emit(command)
+	for node in _owned_net_nodes():
+		node.sample_input.emit(command)
 	# Capture sampled data
 	for node in _owned_net_nodes():
 		node.capture_command(command)
@@ -261,7 +253,7 @@ func _on_server_tick(delta: float) -> void:
 		# Simulate this peer's world
 		for node in _not_owned_net_nodes():
 			node.apply_command(command)
-		simulate_command.emit(command)
+			node.simulate_command.emit(command)
 		# Update latest command processed for peer
 	# Run through events, ensuring only current or old ticks are simulated
 	var store_for_future_tick: Array[SnapEvent] = []
@@ -288,12 +280,11 @@ func _on_server_tick(delta: float) -> void:
 		command.sequence = _command_sequence
 		command.tick = _current_tick
 		command.delta_time = _tick_delta
-		sample_input.emit(command)
+		for node in _owned_net_nodes():
+			node.sample_input.emit(command)
 		for node in _owned_net_nodes():
 			node.capture_command(command)
 		_simulate_command(command)
-				
-	simulate_world.emit(delta)
 	
 	if _current_tick % _ticks_per_snapshot == 0:
 		for peer in multiplayer.get_peers():
@@ -309,12 +300,11 @@ func _on_offline_tick(delta: float) -> void:
 	command.sequence = _command_sequence
 	command.tick = _current_tick
 	command.delta_time = _tick_delta
-	sample_input.emit(command)
+	for node in _owned_net_nodes():
+		node.sample_input.emit(command)
 	for node in _owned_net_nodes():
 		node.capture_command(command)
 	_simulate_command(command)
-	
-	simulate_world.emit(delta)
 
 func _build_snapshot(peer: int) -> Snapshot:
 	var snapshot := Snapshot.new()
@@ -383,7 +373,7 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 func _simulate_command(command: SnapCommand) -> void:
 	for node in _owned_net_nodes():
 		node.apply_command(command)
-	simulate_command.emit(command)
+		node.simulate_command.emit(command)
 
 ## [NetNode]s owned by self.
 func _owned_net_nodes() -> Array[NetNode]:

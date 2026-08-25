@@ -1,6 +1,11 @@
 ## Manages what properties should be synchronized between peers
 class_name NetNode extends Node
 
+## Emitted for owner/server when this node should simulate and update it's state
+signal simulate_command(command: SnapCommand)
+## Emitted for owner when this node should gather command values
+signal sample_input(command: SnapCommand)
+
 ## Properties paths will be relative to this node.
 ## If left empty, will use self as root.
 @export var root: Node

@@ -1,20 +1,21 @@
 [gd_scene format=3 uid="uid://denicwshlb62b"]
 
-[ext_resource type="Script" uid="uid://hj0hcpr1jg4f" path="res://demo/scripts/player.gd" id="1_r1htb"]
-[ext_resource type="Script" uid="uid://bp3yrvsyrbven" path="res://addons/snapgd/nodes/net_node.gd" id="3_m7rvx"]
-[ext_resource type="Script" uid="uid://dgake6qgihm55" path="res://addons/snapgd/nodes/net_interpolator.gd" id="4_sh2ex"]
-[ext_resource type="Script" uid="uid://bseev2otmhm4i" path="res://addons/snapgd/nodes/net_event.gd" id="5_s1jr8"]
+[ext_resource type="Script" uid="uid://d356nifs6j88a" path="res://demo/scripts/player.gd" id="1_r1htb"]
+[ext_resource type="Script" uid="uid://b87pmcrmdemfv" path="res://addons/snapgd/nodes/net_node.gd" id="3_m7rvx"]
+[ext_resource type="Script" uid="uid://b605trkw7omo8" path="res://addons/snapgd/nodes/net_interpolator.gd" id="4_sh2ex"]
+[ext_resource type="Script" uid="uid://b68b83n7whq8o" path="res://addons/snapgd/nodes/net_event.gd" id="5_s1jr8"]
 [ext_resource type="PackedScene" uid="uid://cgxwnhxus1cfr" path="res://demo/assets/3DGodotRobot.glb" id="5_vyyd1"]
-[ext_resource type="Script" uid="uid://cf1b7p4u6g4yi" path="res://addons/snapgd/nodes/net_compensator.gd" id="6_ynbcj"]
+[ext_resource type="Script" uid="uid://c7hxfv2cn16ko" path="res://addons/snapgd/nodes/net_compensator.gd" id="6_ynbcj"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_8483k"]
 height = 1.8
 
-[node name="Player" type="CharacterBody3D" unique_id=1328740095 node_paths=PackedStringArray("camera_node", "animation_player", "skeleton")]
+[node name="Player" type="CharacterBody3D" unique_id=1328740095 node_paths=PackedStringArray("camera_node", "animation_player", "skeleton", "net_node")]
 script = ExtResource("1_r1htb")
 camera_node = NodePath("Camera3D")
 animation_player = NodePath("3DGodotRobot/AnimationPlayer")
 skeleton = NodePath("3DGodotRobot/RobotArmature/Skeleton3D")
+net_node = NodePath("NetNode")
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1321812797]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3, 0)
@@ -26,7 +27,7 @@ shape = SubResource("CapsuleShape3D_8483k")
 [node name="3DGodotRobot" parent="." unique_id=1294103160 instance=ExtResource("5_vyyd1")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Skeleton3D" parent="3DGodotRobot/RobotArmature" parent_id_path=PackedInt32Array(1294103160, 1314756376) index="0" unique_id=1867292922]
+[node name="Skeleton3D" parent="3DGodotRobot/RobotArmature" parent_id_path=PackedInt32Array(1294103160, 776994549) index="0" unique_id=1423301778]
 bones/0/position = Vector3(-3.5255984e-16, 0.86128783, 0.029855084)
 bones/0/rotation = Quaternion(0.014909218, 1.1919608e-07, 1.7773132e-09, 0.9998889)
 bones/1/rotation = Quaternion(0.029448897, -1.52228e-14, 7.0211668e-09, 0.9995664)
@@ -64,26 +65,22 @@ script = ExtResource("3_m7rvx")
 root = NodePath("..")
 command_properties = PackedStringArray(".:camera_yaw", ".:camera_pitch", ".:should_jump", ".:input_dir")
 state_properties = PackedStringArray(".:position", ".:animation_state", ".:camera_pitch", ".:camera_yaw")
-metadata/_custom_type_script = "uid://bp3yrvsyrbven"
 
 [node name="NetInterpolator" type="Node" parent="NetNode" unique_id=1736350409 node_paths=PackedStringArray("net_node")]
 script = ExtResource("4_sh2ex")
 net_node = NodePath("..")
 interpolated_properties = PackedStringArray(".:position", ".:camera_pitch", ".:camera_yaw")
 smoothed_properties = PackedStringArray(".:position", ".:camera_pitch", ".:camera_yaw")
-metadata/_custom_type_script = "uid://dgake6qgihm55"
 
 [node name="NetEvent" type="Node" parent="." unique_id=1965993080 node_paths=PackedStringArray("root")]
 script = ExtResource("5_s1jr8")
 root = NodePath("..")
 events = PackedStringArray("event_speak")
 lag_compensated = true
-metadata/_custom_type_script = "uid://bseev2otmhm4i"
 
 [node name="NetCompensator" type="Node" parent="." unique_id=153009323 node_paths=PackedStringArray("root")]
 script = ExtResource("6_ynbcj")
 root = NodePath("..")
 compensated_properties = PackedStringArray(".:position")
-metadata/_custom_type_script = "uid://cf1b7p4u6g4yi"
 
 [editable path="3DGodotRobot"]

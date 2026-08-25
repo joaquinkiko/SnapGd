@@ -13,6 +13,7 @@ const HEAD_INDEX := 5
 @export var camera_node: Camera3D
 @export var animation_player: AnimationPlayer
 @export var skeleton: Skeleton3D
+@export var net_node: NetNode
 
 enum AnimationState {
 	STANDING = 0,
@@ -31,8 +32,8 @@ var should_jump := false
 var input_dir := Vector2.ZERO
 
 func _enter_tree() -> void:
-	SnapAPI.simulate_command.connect(_simulate)
-	SnapAPI.sample_input.connect(_gather_input)
+	net_node.simulate_command.connect(_simulate)
+	net_node.sample_input.connect(_gather_input)
 	set_multiplayer_authority(name.trim_prefix("Player").to_int())
 
 func _ready() -> void:
