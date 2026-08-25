@@ -56,6 +56,8 @@ var _last_processed_event_sequence: int
 var is_client_server: bool = true
 ## Commands that server needs to process next tick (peer : commands)
 var _pending_commands: Dictionary[int, Array]
+## Last command simulated by peer (peer : command)
+var _previous_command: Dictionary[int, SnapCommand]
 ## Last command sequence processed (peer : sequence)
 var _last_command_sequence: Dictionary[int, int]
 ## Client sequence of last event received from remote peer, sorted {peer : sequence}.
@@ -243,15 +245,24 @@ func _on_server_tick(delta: float) -> void:
 	# Simulate all commands...
 	for peer in multiplayer.get_peers():
 		var queue: Array = _pending_commands.get(peer, [])
-		while !queue.is_empty():
+		var command: SnapCommand
+		# Only 1 Command will be processed per tick
+		# If no command is queued, then reuse last command received
+		# This ensures consistent simulation timing between all peers
+		if !queue.is_empty(): # Grab next command
 			# Pop command from front of queue
-			var command: SnapCommand = _pending_commands.get(peer, []).pop_front()
-			# Simulate this peer's world
-			for node in _not_owned_net_nodes():
-				node.apply_command(command)
-			simulate_command.emit(command)
-			# Update latest command processed for peer
+			command = _pending_commands.get(peer, []).pop_front()
 			_last_command_sequence[peer] = command.sequence
+		else: # Reuse last command, or default to blank command
+			command = _previous_command.get(peer, SnapCommand.new())
+			command.tick = _current_tick
+			command.delta_time = delta
+			_previous_command[peer] = command
+		# Simulate this peer's world
+		for node in _not_owned_net_nodes():
+			node.apply_command(command)
+		simulate_command.emit(command)
+		# Update latest command processed for peer
 	# Run through events, ensuring only current or old ticks are simulated
 	var store_for_future_tick: Array[SnapEvent] = []
 	for event in upcoming_events:
