@@ -64,12 +64,12 @@ bones/24/rotation = Quaternion(6.345524e-08, 0.9807643, -0.19519578, -1.8277877e
 script = ExtResource("3_m7rvx")
 root = NodePath("..")
 command_properties = PackedStringArray(".:camera_yaw", ".:camera_pitch", ".:should_jump", ".:input_dir")
-state_properties = PackedStringArray(".:position", ".:animation_state", ".:camera_pitch", ".:camera_yaw", ".:velocity")
+state_properties = PackedStringArray(".:position", ".:animation_state", ".:camera_pitch", ".:rotation:y", ".:velocity")
 
 [node name="NetInterpolator" type="Node" parent="NetNode" unique_id=1736350409 node_paths=PackedStringArray("net_node")]
 script = ExtResource("4_sh2ex")
 net_node = NodePath("..")
-interpolated_properties = PackedStringArray(".:position", ".:camera_pitch", ".:camera_yaw")
+interpolated_properties = PackedStringArray(".:position", ".:rotation:y")
 smoothed_properties = PackedStringArray(".:position", ".:camera_pitch", ".:camera_yaw")
 
 [node name="NetEvent" type="Node" parent="." unique_id=1965993080 node_paths=PackedStringArray("root")]

@@ -34,6 +34,7 @@ var input_dir := Vector2.ZERO
 func _enter_tree() -> void:
 	net_node.simulate_command.connect(_simulate)
 	net_node.sample_input.connect(_gather_input)
+	SnapAPI.post_tick_loop.connect(_render_update)
 	set_multiplayer_authority(name.trim_prefix("Player").to_int())
 
 func _ready() -> void:
@@ -163,6 +164,22 @@ func _is_on_floor() -> bool:
 		return space.intersect_ray(params).size() > 0
 	else:
 		return is_on_floor()
+
+func _render_update() -> void:
+	if multiplayer.is_server() || is_multiplayer_authority():
+		return # This is only for remote clients
+	# Update animation state
+	if _previous_animation_state != animation_state:
+		_previous_animation_state = animation_state
+		match animation_state:
+			AnimationState.STANDING: animation_player.current_animation = "Idle"
+			AnimationState.WALKING: animation_player.current_animation = "Run"
+			AnimationState.JUMPING: animation_player.current_animation = "LongJump"
+			AnimationState.FALLING: animation_player.current_animation = "Fall"
+	# Update head animation
+	var current_transform := skeleton.get_bone_global_pose(HEAD_INDEX)
+	current_transform.basis = Basis(Quaternion(Vector3.RIGHT, -camera_pitch / 1.5))
+	skeleton.set_bone_global_pose_override(HEAD_INDEX, current_transform, 1.0, true)
 
 func _apply_motion(delta: float) -> void:
 	if USE_CUSTOM_PHYSICS:
