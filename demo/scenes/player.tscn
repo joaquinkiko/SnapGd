@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://denicwshlb62b"]
 
-[ext_resource type="Script" uid="uid://d356nifs6j88a" path="res://demo/scripts/player.gd" id="1_r1htb"]
-[ext_resource type="Script" uid="uid://b87pmcrmdemfv" path="res://addons/snapgd/nodes/net_node.gd" id="3_m7rvx"]
+[ext_resource type="Script" uid="uid://uehijqm1mxju" path="res://demo/scripts/player.gd" id="1_r1htb"]
+[ext_resource type="Script" uid="uid://dtac58vkc4d4q" path="res://addons/snapgd/nodes/net_node.gd" id="3_m7rvx"]
 [ext_resource type="Script" uid="uid://b605trkw7omo8" path="res://addons/snapgd/nodes/net_interpolator.gd" id="4_sh2ex"]
 [ext_resource type="Script" uid="uid://b68b83n7whq8o" path="res://addons/snapgd/nodes/net_event.gd" id="5_s1jr8"]
 [ext_resource type="PackedScene" uid="uid://cgxwnhxus1cfr" path="res://demo/assets/3DGodotRobot.glb" id="5_vyyd1"]
@@ -27,7 +27,7 @@ shape = SubResource("CapsuleShape3D_8483k")
 [node name="3DGodotRobot" parent="." unique_id=1294103160 instance=ExtResource("5_vyyd1")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Skeleton3D" parent="3DGodotRobot/RobotArmature" parent_id_path=PackedInt32Array(1294103160, 776994549) index="0" unique_id=1423301778]
+[node name="Skeleton3D" parent="3DGodotRobot/RobotArmature" parent_id_path=PackedInt32Array(1294103160, 836101167) index="0" unique_id=902005218]
 bones/0/position = Vector3(-3.5255984e-16, 0.86128783, 0.029855084)
 bones/0/rotation = Quaternion(0.014909218, 1.1919608e-07, 1.7773132e-09, 0.9998889)
 bones/1/rotation = Quaternion(0.029448897, -1.52228e-14, 7.0211668e-09, 0.9995664)
@@ -64,7 +64,7 @@ bones/24/rotation = Quaternion(6.345524e-08, 0.9807643, -0.19519578, -1.8277877e
 script = ExtResource("3_m7rvx")
 root = NodePath("..")
 command_properties = PackedStringArray(".:camera_yaw", ".:camera_pitch", ".:should_jump", ".:input_dir")
-state_properties = PackedStringArray(".:position", ".:animation_state", ".:camera_pitch", ".:camera_yaw")
+state_properties = PackedStringArray(".:position", ".:animation_state", ".:camera_pitch", ".:camera_yaw", ".:velocity")
 
 [node name="NetInterpolator" type="Node" parent="NetNode" unique_id=1736350409 node_paths=PackedStringArray("net_node")]
 script = ExtResource("4_sh2ex")
