@@ -12,6 +12,8 @@ const _BUFFER_SIZE := 32
 @export var smoothed_properties: PackedStringArray
 ## How far in past (in msec) remote peers are interpolated.
 @export_range(50, 150, 1) var interpolation_delay_msec: float = 100
+## Reconciliation offsets above this magnitude snap instantly instead of blending.
+@export var snap_threshold: float = 1.0
  
 ## Stores received snapshots to interpolate over.
 var _snapshot_buffer: Array[Snapshot] = []
@@ -81,6 +83,10 @@ func _apply_smoothing_offsets() -> void:
 		var property: NodePath = prop.split(':', true, 2)[1]
 		var offset: Variant = net_node.get_render_offset(prop)
 		if offset == null: continue
+		if _variant_magnitude(offset) > snap_threshold:
+			# Error too large, snap instead of blend
+			net_node.clear_render_offset(prop)
+			continue
 		var node: Node = net_node.root.get_node(node_path)
 		if node == null: continue
 		node.set_indexed(property, node.get_indexed(property) + offset)
@@ -110,3 +116,10 @@ func _lerp_variant(a: Variant, b: Variant, t: float) -> Variant:
 		TYPE_VECTOR2: return (a as Vector2).lerp(b, t)
 		TYPE_VECTOR3: return (a as Vector3).lerp(b, t)
 		_: return b
+
+func _variant_magnitude(offset: Variant) -> float:
+	match typeof(offset):
+		TYPE_FLOAT, TYPE_INT: return absf(offset)
+		TYPE_VECTOR2: return (offset as Vector2).length()
+		TYPE_VECTOR3: return (offset as Vector3).length()
+		_: return 0.0

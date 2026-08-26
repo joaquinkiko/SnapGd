@@ -72,3 +72,7 @@ func get_render_offset(prop: String) -> Variant:
 
 func _key(prop: String) -> StringName:
 	return StringName("%s:%s" % [get_path(), prop])
+
+## Clears reconciliation offset for this property, forcing an instant snap.
+func clear_render_offset(prop: String) -> void:
+	SnapAPI.render_offsets.erase(_key(prop))

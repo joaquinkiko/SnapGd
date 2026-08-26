@@ -4,8 +4,6 @@ extends Node
 ## Sequence buffer size for outbound packets
 const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
-## Prediction errors beyond this should be hard-snapped
-const _RECONCILIATION_THRESHOLD := 1.0
 ## Prediction errors below this should be ignored (assume floating point noise)
 const _RECONCILIATION_EPSILON := 0.001
 
@@ -355,10 +353,8 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 			node.capture_state(state)
 		_state_history[seq & _SEQ_BUFFER_MASK] = state
 	
-	if error > _RECONCILIATION_THRESHOLD:
-		# Large error, should be snapped to correction
-		render_offsets.clear()
-	elif error > _RECONCILIATION_EPSILON:
+	# Errors smaller than _RECONCILIATION_EPSILON can be ignored (floating point noise)
+	if error > _RECONCILIATION_EPSILON:
 		# Small error, can be blended over multiple ticks
 		if predicted_state:
 			for key in authoritative_state.data:
