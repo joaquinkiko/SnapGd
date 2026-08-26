@@ -143,6 +143,12 @@ var max_ticks_per_frame: int:
 		_max_ticks_per_frame = maxi(1, value)
 var _max_ticks_per_frame: int = ProjectSettings.get_setting("SnapAPI/max_tick_per_frame", 8)
 
+## Max events that can be simulated in a single tick, to avoid overload
+var max_events_per_tick: int:
+	get: return _max_events_per_tick
+	set(value): _max_events_per_tick = maxi(1, _max_events_per_tick)
+var _max_events_per_tick: int = ProjectSettings.get_setting("SnapAPI/max_events_per_tick", 64)
+
 # Time calculation data
 
 ## Current mircoseconds between ticks
@@ -222,12 +228,15 @@ func _on_client_tick(delta: float) -> void:
 	_command_history[command.sequence & _SEQ_BUFFER_MASK] = command
 	# Run through events, ensuring only current or old ticks are simulated
 	var store_for_future_tick: Array[SnapEvent] = []
+	var events_simulated: int
 	for event in upcoming_events:
 		if event.tick > _current_tick:
 			store_for_future_tick.append(event)
 			continue # Don't erase yet
 		# Ready to be simulated
 		get_node(event.node_path).apply_event(event.event_name, event.args, event.caller, event.tick)
+		events_simulated += 1
+		if events_simulated >= max_events_per_tick: break
 	upcoming_events = store_for_future_tick # Clean up queue with only future events
 	# Send pending events and command (plus redundant commands)
 	if _current_tick % _ticks_per_input_send == 0:
@@ -270,12 +279,15 @@ func _on_server_tick(delta: float) -> void:
 		# Update latest command processed for peer
 	# Run through events, ensuring only current or old ticks are simulated
 	var store_for_future_tick: Array[SnapEvent] = []
+	var events_simulated: int
 	for event in upcoming_events:
 		if event.tick > _current_tick:
 			store_for_future_tick.append(event)
 			continue # Don't erase yet
 		# Ready to be simulated
 		get_node(event.node_path).apply_event(event.event_name, event.args, event.caller, event.tick)
+		events_simulated += 1
+		if events_simulated >= max_events_per_tick: break
 	upcoming_events = store_for_future_tick # Clean up queue with only future events
 	# Send pending events
 	_collect_events() # collect only once prior to loop

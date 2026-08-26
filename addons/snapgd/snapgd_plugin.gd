@@ -30,6 +30,13 @@ const settings := [
 		"hint_string": "1,16,or_greater",
 		"default": 8,
 	},
+	{
+		"name": "SnapAPI/max_events_per_tick",
+		"type": TYPE_INT,
+		"hint": PROPERTY_HINT_RANGE,
+		"hint_string": "1,128,or_greater",
+		"default": 64,
+	},
 ]
 
 func _enable_plugin() -> void:
