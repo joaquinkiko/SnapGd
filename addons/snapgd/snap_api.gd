@@ -66,6 +66,8 @@ var _last_received_client_event_sequence: Dictionary[int, int]
 var _next_net_id: int = 1
 ## Identifiables registered since last broadcast.
 var _pending_identifiables: Array[NetIdentifiable]
+## Identifiable IDs removed since last broadcast.
+var _pending_removed_identifiables: Array[int]
 
 # Shared server and client data
 
@@ -181,6 +183,7 @@ func _ready() -> void:
 	multiplayer.connected_to_server.connect(_timer_reset)
 	multiplayer.peer_connected.connect(_send_identifiables_to_new_peer)
 	pre_tick_loop.connect(_broadcast_pending_identifiables)
+	pre_tick_loop.connect(_broadcast_pending_identifiable_removals)
 
 func _process(delta: float) -> void:
 	if not _is_paused:
@@ -717,9 +720,12 @@ func register_net_identifiable(node: NetIdentifiable) -> void:
 
 ## Unregisters [param node] from identification. Typically called when it exits tree.
 func unregister_net_identifiable(node: NetIdentifiable) -> void:
+	if _pending_identifiables.has(node):
+		_pending_identifiables.erase(node) # Never broadcast, nothing to remove
+	elif node.net_id != -1:
+		_pending_removed_identifiables.append(node.net_id) # Already known to peers, must notify
 	if node.net_id != -1:
 		_net_identifiables.erase(node.net_id)
-	_pending_identifiables.erase(node)
 
 ## Sends newly registered identifiables to all peers, bundled into one packet.
 func _broadcast_pending_identifiables() -> void:
@@ -760,3 +766,24 @@ func _receive_identification(encoded_identification: PackedByteArray) -> void:
 			_net_identifiables[id] = node
 		else: # Node hasn't spawned yet, resolve when it registers
 			_pending_path_ids[path] = id
+
+## Sends removed identifiable IDs to all peers, bundled into one packet.
+func _broadcast_pending_identifiable_removals() -> void:
+	if not multiplayer.is_server(): return # Server -> peer only
+	if _pending_removed_identifiables.is_empty(): return # Nothing to broadcast
+	var raw := StreamPeerBuffer.new()
+	raw.put_32(_pending_removed_identifiables.size())
+	for id in _pending_removed_identifiables:
+		raw.put_32(id)
+	_pending_removed_identifiables.clear()
+	for peer in multiplayer.get_peers():
+		_receive_identification_removal.rpc_id(peer, raw.data_array)
+
+@rpc("authority", "reliable", "call_remote")
+func _receive_identification_removal(encoded_ids: PackedByteArray) -> void:
+	if multiplayer.is_server(): return # Only server -> peer
+	var buffer := StreamPeerBuffer.new()
+	buffer.data_array = encoded_ids
+	var count := buffer.get_32()
+	for n in count:
+		_net_identifiables.erase(buffer.get_32())
