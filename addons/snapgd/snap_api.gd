@@ -45,6 +45,8 @@ var _last_acked_command_sequence: int
 ## Highest command sequence queued server-side, per peer
 ## to prevents re-queueing overlap between bundles.
 var _last_queued_command_sequence: Dictionary[int, int]
+## Path->id mappings received before the node existed locally yet
+var _pending_path_ids: Dictionary[NodePath, int]
 
 # Server-side data
 
@@ -60,9 +62,15 @@ var _last_command_sequence: Dictionary[int, int]
 ## This is the client's sequence for events they generate, not to be confused with
 ## server sequence for relayed events (see [member _last_acked_event_sequence]).
 var _last_received_client_event_sequence: Dictionary[int, int]
+## Next ID to assign to a new identifiable.
+var _next_net_id: int = 1
+## Identifiables registered since last broadcast.
+var _pending_identifiables: Array[NetIdentifiable]
 
 # Shared server and client data
 
+## Registered identifiables (id : node).
+var _net_identifiables: Dictionary[int, NetIdentifiable]
 ## All registered [NetNode]s to be handled.
 var _net_nodes: Array[NetNode]
 ## All registered [NetEvent]s to be handled.
@@ -171,6 +179,8 @@ func _ready() -> void:
 	_command_history.resize(_SEQ_BUFFER_SIZE)
 	_state_history.resize(_SEQ_BUFFER_SIZE)
 	multiplayer.connected_to_server.connect(_timer_reset)
+	multiplayer.peer_connected.connect(_send_identifiables_to_new_peer)
+	pre_tick_loop.connect(_broadcast_pending_identifiables)
 
 func _process(delta: float) -> void:
 	if not _is_paused:
@@ -688,3 +698,65 @@ func restore_compensators() -> void:
 
 ## TODO: Add delta compression handling (Snapshot.baseline_tick will
 ## eventually be used to compress states_data in _receive_snapshot
+
+## Registers [param node] for identification. Typically called when it enters tree.
+func register_net_identifiable(node: NetIdentifiable) -> void:
+	if multiplayer.is_server() \
+	|| multiplayer.multiplayer_peer is OfflineMultiplayerPeer \
+	|| multiplayer.multiplayer_peer == null:
+		node.net_id = _next_net_id
+		_next_net_id += 1
+		_net_identifiables[node.net_id] = node
+		_pending_identifiables.append(node)
+	else: # Client may have received the ID before the node existed
+		var path := node.get_path()
+		if _pending_path_ids.has(path):
+			node.net_id = _pending_path_ids[path]
+			_net_identifiables[node.net_id] = node
+			_pending_path_ids.erase(path)
+
+## Unregisters [param node] from identification. Typically called when it exits tree.
+func unregister_net_identifiable(node: NetIdentifiable) -> void:
+	if node.net_id != -1:
+		_net_identifiables.erase(node.net_id)
+	_pending_identifiables.erase(node)
+
+## Sends newly registered identifiables to all peers, bundled into one packet.
+func _broadcast_pending_identifiables() -> void:
+	if not multiplayer.is_server(): return # Only server broadcasts
+	if _pending_identifiables.is_empty(): return # Nothing to broadcast
+	var identification := SnapIdentification.new()
+	for node in _pending_identifiables:
+		if not is_instance_valid(node): continue
+		identification.ids.append(node.net_id)
+		identification.paths.append(node.get_path())
+	_pending_identifiables.clear()
+	if identification.ids.is_empty(): return
+	for peer in multiplayer.get_peers():
+		_receive_identification.rpc_id(peer, identification.encode())
+
+## Sends every currently active identifiable to a newly connected peer.
+func _send_identifiables_to_new_peer(peer: int) -> void:
+	if not multiplayer.is_server(): return
+	var identification := SnapIdentification.new()
+	for id in _net_identifiables:
+		var node := _net_identifiables[id]
+		if not is_instance_valid(node): continue
+		identification.ids.append(id)
+		identification.paths.append(node.get_path())
+	if identification.ids.is_empty(): return
+	_receive_identification.rpc_id(peer, identification.encode())
+
+@rpc("authority", "reliable", "call_remote")
+func _receive_identification(encoded_identification: PackedByteArray) -> void:
+	if multiplayer.is_server(): return # Only server -> peer
+	var identification := SnapIdentification.new().decode(encoded_identification)
+	for n in identification.ids.size():
+		var id: int = identification.ids[n]
+		var path: NodePath = identification.paths[n]
+		var node := get_node_or_null(path)
+		if node is NetIdentifiable:
+			node.net_id = id
+			_net_identifiables[id] = node
+		else: # Node hasn't spawned yet, resolve when it registers
+			_pending_path_ids[path] = id

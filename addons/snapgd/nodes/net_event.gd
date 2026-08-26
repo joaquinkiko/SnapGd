@@ -1,7 +1,7 @@
 ## Handles relaying one-time function calls across the network.\
 ## Events are guaranteed to be ran on all peers. Can check if peer is
 ## server or not to run server specific logic in event.
-class_name NetEvent extends Node
+class_name NetEvent extends NetIdentifiable
 
 ## Peer ID of current event caller. -1 if called outside of an event.
 static var current_event_caller: int = -1
@@ -30,9 +30,11 @@ enum Rule {
 var _pending: Array[Array] = []
  
 func _enter_tree() -> void:
+	super._enter_tree()
 	SnapAPI.register_net_event(self)
  
 func _exit_tree() -> void:
+	super._exit_tree()
 	SnapAPI.unregister_net_event(self)
  
 func _ready() -> void:

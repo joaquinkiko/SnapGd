@@ -1,5 +1,5 @@
 ## Manages what properties should be synchronized between peers
-class_name NetNode extends Node
+class_name NetNode extends NetIdentifiable
 
 ## Emitted for owner/server when this node should simulate and update it's state
 signal simulate_command(command: SnapCommand)
@@ -17,9 +17,11 @@ signal sample_input(command: SnapCommand)
 @export var state_properties: PackedStringArray
 
 func _enter_tree() -> void:
+	super._enter_tree()
 	SnapAPI.register_net_node(self)
 
 func _exit_tree() -> void:
+	super._exit_tree()
 	SnapAPI.unregister_net_node(self)
 
 func _ready() -> void:
