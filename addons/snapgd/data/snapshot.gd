@@ -9,6 +9,8 @@ var baseline_tick: int
 var last_command_sequence: int
 ##
 var states: Array[SnapState]
+## Relayed events piggybacking on this snapshot.
+var events: Array[SnapEvent]
 
 func encode() -> PackedByteArray:
 	var raw := StreamPeerBuffer.new()
@@ -18,6 +20,9 @@ func encode() -> PackedByteArray:
 	write_int(raw, states.size())
 	for n in states.size():
 		write_bytes(raw, states[n].encode())
+	write_int(raw, events.size())
+	for n in events.size():
+		write_bytes(raw, events[n].encode())
 	return raw.data_array
 
 func decode(bytes: PackedByteArray) -> Snapshot:
@@ -29,4 +34,7 @@ func decode(bytes: PackedByteArray) -> Snapshot:
 	states.resize(read_int(buffer))
 	for n in states.size():
 		states[n] = SnapState.new().decode(read_bytes(buffer))
+	events.resize(read_int(buffer))
+	for n in events.size():
+		events[n] = SnapEvent.new().decode(read_bytes(buffer))
 	return self

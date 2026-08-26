@@ -266,14 +266,6 @@ func _on_server_tick(delta: float) -> void:
 	upcoming_events = store_for_future_tick # Clean up queue with only future events
 	# Send pending events
 	_collect_events() # collect only once prior to loop
-	for peer in multiplayer.get_peers():
-		for sequence in _pending_out_events:
-			if sequence < _last_acked_event_sequence.get(peer, 0):
-				continue # Don't resent already acked sequence
-			_pending_out_events[sequence].sequence = sequence
-			_relay_events.rpc_id(peer,
-				_pending_out_events[sequence].encode()
-			)
 	# Client-Server simulates their own commands
 	if is_client_server:
 		var command := SnapCommand.new()
@@ -289,6 +281,7 @@ func _on_server_tick(delta: float) -> void:
 	if _current_tick % _ticks_per_snapshot == 0:
 		for peer in multiplayer.get_peers():
 			var snapshot := _build_snapshot(peer)
+			snapshot.events = _outbound_events_for(peer)
 			# Send to peer (unreliable)
 			_receive_snapshot.rpc_id(peer,
 				snapshot.encode()
@@ -322,6 +315,8 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 	if snapshot.states.is_empty():
 		return
 	snapshot_received.emit(snapshot)
+	for event in snapshot.events:
+		_process_relayed_event(event)
 	var authoritative_state: SnapState = snapshot.states.back()
 	var acked_sequence: int = snapshot.last_command_sequence
 	_last_acked_command_sequence = maxi(_last_acked_command_sequence, acked_sequence)
@@ -367,6 +362,25 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 	# Placeholder until interpolation is implemented
 	for node in _not_owned_net_nodes():
 		node.apply_state(authoritative_state)
+
+## Applies a relayed event from the server, respecting sequence ordering.
+func _process_relayed_event(event: SnapEvent) -> void:
+	if event.sequence == _last_processed_event_sequence + 1: # Next event in sequence
+		if event.caller != multiplayer.get_unique_id(): # Don't play if relayed from self
+			upcoming_events.append(event)
+		_last_processed_event_sequence = event.sequence
+		var next_sequence := _last_processed_event_sequence + 1
+		while _future_queued_events.has(1) and _future_queued_events[1].has(next_sequence):
+			if event.caller != multiplayer.get_unique_id():
+				upcoming_events.append(_future_queued_events[1][next_sequence])
+			_last_processed_event_sequence = next_sequence
+			_future_queued_events[1].erase(next_sequence)
+			next_sequence += 1
+	elif event.sequence < _last_processed_event_sequence: # Old sequence (junk it)
+		return
+	else: # Future sequence, arrived out-of-order
+		if not _future_queued_events.has(1): _future_queued_events[1] = {}
+		_future_queued_events[1][event.sequence] = event
 
 ## Runs [param command] against every locally-owned [NetNode].
 func _simulate_command(command: SnapCommand) -> void:
@@ -626,31 +640,6 @@ func _collect_events() -> Dictionary[int, SnapEvent]:
 			event.caller = multiplayer.get_unique_id()
 			_pending_out_events[event.sequence] = event
 	return _pending_out_events
-
-@rpc("authority", "unreliable_ordered", "call_remote")
-func _relay_events(encoded_event: PackedByteArray) -> void:
-	# Decode
-	var event := SnapEvent.new().decode(encoded_event)
-	# Check event sequence to determine handling
-	if event.sequence == _last_processed_event_sequence + 1: # Next even in sequence
-		# Play instantly and update sequence
-		# Events relayed from self won't be played but should still be handled for sequencing
-		if event.caller != multiplayer.get_unique_id(): # Don't play if relayed from self
-			upcoming_events.append(event)
-		_last_processed_event_sequence = event.sequence
-		# Play cached sequences forward as far as possible
-		var next_sequence := _last_processed_event_sequence + 1
-		while _future_queued_events.has(1) and _future_queued_events[1].has(next_sequence):
-			if event.caller != multiplayer.get_unique_id(): # Don't play if relayed from self
-				upcoming_events.append(_future_queued_events[1][next_sequence])
-			_last_processed_event_sequence = next_sequence
-			_future_queued_events[1].erase(next_sequence) # Consume pending sequence
-			next_sequence += 1
-	elif event.sequence < _last_processed_event_sequence: # Old sequence (junk it)
-		return 
-	else: # Future sequence, arrived out-of-order
-		if !_future_queued_events.has(1): _future_queued_events[1] = {}
-		_future_queued_events[1][event.sequence] = event # Queue for later
 
 ## Registers [param node] for handling. Typically called when it enters tree.
 func register_net_compensator(node: NetCompensator) -> void:
