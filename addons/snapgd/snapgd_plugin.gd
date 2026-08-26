@@ -17,6 +17,13 @@ const settings := [
 		"default": 30,
 	},
 	{
+		"name": "SnapAPI/input_send_rate",
+		"type": TYPE_FLOAT,
+		"hint": PROPERTY_HINT_RANGE,
+		"hint_string": "15,64,or_greater,prefer_slider",
+		"default": 30,
+	},
+	{
 		"name": "SnapAPI/max_tick_per_frame",
 		"type": TYPE_INT,
 		"hint": PROPERTY_HINT_RANGE,

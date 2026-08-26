@@ -6,8 +6,8 @@ const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
 ## Prediction errors below this should be ignored (assume floating point noise)
 const _RECONCILIATION_EPSILON := 0.001
-## Max redundant commands sent per bundle (includes the latest)
-const _COMMAND_REDUNDANCY := 3
+## Max redundant commands sent per bundle (to help with packet loss)
+const _COMMAND_REDUNDANCY_MARGIN := 3
 
 ## Emitted once before any ticks are processed this frame. Any data
 ## that doesn't change more than once per frame should be sampled here.
@@ -106,6 +106,18 @@ var snapshot_rate: float:
 var _ticks_per_snapshot: int = roundi(
 	1e6 / ceili(1e6 / ProjectSettings.get_setting("SnapAPI/tick_rate", 60)) #_tick_rate
 	/ maxf(1.0, ProjectSettings.get_setting("SnapAPI/snapshot_rate", 30))
+	)
+
+## How often input bundles should be sent from client to server.
+var input_send_rate: float:
+	get:
+		return _tick_rate / float(maxi(1, _ticks_per_input_send))
+	set(value):
+		var rate := maxf(1, value)
+		_ticks_per_input_send = maxi(1, roundi(_tick_rate / maxf(1.0, rate)))
+var _ticks_per_input_send: int = roundi(
+	1e6 / ceili(1e6 / ProjectSettings.get_setting("SnapAPI/tick_rate", 60)) #_tick_rate
+	/ maxf(1.0, ProjectSettings.get_setting("SnapAPI/input_send_rate", 30))
 	)
 
 ## Simulation tick rate in ticks per second
@@ -218,12 +230,13 @@ func _on_client_tick(delta: float) -> void:
 		get_node(event.node_path).apply_event(event.event_name, event.args, event.caller, event.tick)
 	upcoming_events = store_for_future_tick # Clean up queue with only future events
 	# Send pending events and command (plus redundant commands)
-	_collect_events()
-	var bundle := SnapInputBundle.new()
-	bundle.commands = _collect_redundant_commands(command.sequence)
-	bundle.events = _outbound_events_for(1)
-	bundle.ack_sequence = _last_processed_event_sequence
-	_receive_input_bundle.rpc_id(1, bundle.encode())
+	if _current_tick % _ticks_per_input_send == 0:
+		_collect_events()
+		var bundle := SnapInputBundle.new()
+		bundle.commands = _collect_redundant_commands(command.sequence)
+		bundle.events = _outbound_events_for(1)
+		bundle.ack_sequence = _last_processed_event_sequence
+		_receive_input_bundle.rpc_id(1, bundle.encode())
 	# Predict command
 	_simulate_command(command)
 	# Store in state history
@@ -523,7 +536,8 @@ func _process_incoming_event(peer: int, event: SnapEvent) -> void:
 ## Gathers latest command + redundant unacked commands, oldest to newest.
 func _collect_redundant_commands(latest_sequence: int) -> Array[SnapCommand]:
 	var out: Array[SnapCommand] = []
-	var start_sequence: int = maxi(_last_acked_command_sequence + 1, latest_sequence - _COMMAND_REDUNDANCY + 1)
+	var span: int = _ticks_per_input_send + _COMMAND_REDUNDANCY_MARGIN
+	var start_sequence: int = maxi(_last_acked_command_sequence + 1, latest_sequence - span + 1)
 	for seq in range(start_sequence, latest_sequence + 1):
 		var command: SnapCommand = _command_history[seq & _SEQ_BUFFER_MASK]
 		if command != null and command.sequence == seq:
