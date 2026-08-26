@@ -251,7 +251,7 @@ func _on_server_tick(delta: float) -> void:
 			command.delta_time = delta
 			_previous_command[peer] = command
 		# Simulate this peer's world
-		for node in _not_owned_net_nodes():
+		for node in _peer_net_nodes(peer):
 			node.apply_command(command)
 			node.simulate_command.emit(command)
 		# Update latest command processed for peer
