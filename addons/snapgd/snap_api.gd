@@ -6,6 +6,8 @@ const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
 ## Prediction errors below this should be ignored (assume floating point noise)
 const _RECONCILIATION_EPSILON := 0.001
+## Max redundant commands sent per bundle (includes the latest)
+const _COMMAND_REDUNDANCY := 3
 
 ## Emitted once before any ticks are processed this frame. Any data
 ## that doesn't change more than once per frame should be sampled here.
@@ -38,6 +40,11 @@ var render_offsets: Dictionary[StringName, Variant]
 ## Sequence of the last event processed by the client.
 ## NOT last event received, as some events may be queued for later.
 var _last_processed_event_sequence: int
+## Highest command sequence server has acknowledged via snapshot.
+var _last_acked_command_sequence: int
+## Highest command sequence queued server-side, per peer
+## to prevents re-queueing overlap between bundles.
+var _last_queued_command_sequence: Dictionary[int, int]
 
 # Server-side data
 
@@ -201,10 +208,6 @@ func _on_client_tick(delta: float) -> void:
 		node.capture_command(command)
 	# Store command in buffer
 	_command_history[command.sequence & _SEQ_BUFFER_MASK] = command
-	# Send to server (unreliable)
-	_receive_command.rpc_id(1,
-		command.encode()
-	)
 	# Run through events, ensuring only current or old ticks are simulated
 	var store_for_future_tick: Array[SnapEvent] = []
 	for event in upcoming_events:
@@ -214,14 +217,13 @@ func _on_client_tick(delta: float) -> void:
 		# Ready to be simulated
 		get_node(event.node_path).apply_event(event.event_name, event.args, event.caller, event.tick)
 	upcoming_events = store_for_future_tick # Clean up queue with only future events
-	# Send pending events
-	for sequence in _collect_events():
-		if sequence < _last_acked_event_sequence.get(1, 0):
-			continue # Don't resent already acked sequence
-		_receive_events.rpc_id(1,
-			_pending_out_events[sequence].encode(),
-			_last_processed_event_sequence,
-		)
+	# Send pending events and command (plus redundant commands)
+	_collect_events()
+	var bundle := SnapInputBundle.new()
+	bundle.commands = _collect_redundant_commands(command.sequence)
+	bundle.events = _outbound_events_for(1)
+	bundle.ack_sequence = _last_processed_event_sequence
+	_receive_input_bundle.rpc_id(1, bundle.encode())
 	# Predict command
 	_simulate_command(command)
 	# Store in state history
@@ -322,6 +324,7 @@ func _on_snapshot_received(snapshot: Snapshot) -> void:
 	snapshot_received.emit(snapshot)
 	var authoritative_state: SnapState = snapshot.states.back()
 	var acked_sequence: int = snapshot.last_command_sequence
+	_last_acked_command_sequence = maxi(_last_acked_command_sequence, acked_sequence)
 	# Discard history up to last processed sequence to avoid stale reads
 	if acked_sequence >= 0:
 		var acked_slot := acked_sequence & _SEQ_BUFFER_MASK
@@ -455,18 +458,72 @@ func _variant_subtract(a: Variant, b: Variant) -> Variant:
 			return null
 
 @rpc("any_peer", "unreliable_ordered", "call_remote")
-func _receive_command(encoded_command: PackedByteArray) -> void:
+func _receive_input_bundle(encoded_bundle: PackedByteArray) -> void:
 	if not multiplayer.is_server(): return # Only peer -> server
 	if _is_paused: return # Shouldn't queue commands while paused
 	var peer := multiplayer.get_remote_sender_id()
-	# Decode
-	var command := SnapCommand.new().decode(encoded_command)
-	# Check if command is stale or duplicate
-	if _last_command_sequence.get(peer, 0) >= command.sequence: return
-	# Add command to be processed
-	if not _pending_commands.has(peer):
-		_pending_commands[peer] = []
-	_pending_commands[peer].append(command)
+	var bundle := SnapInputBundle.new().decode(encoded_bundle)
+
+	# Queue new commands only, skipping anything already simulated or already queued
+	var last_queued: int = _last_queued_command_sequence.get(peer, _last_command_sequence.get(peer, 0))
+	for command in bundle.commands:
+		if command.sequence <= last_queued:
+			continue # Already simulated or already queued from an earlier bundle
+		if not _pending_commands.has(peer):
+			_pending_commands[peer] = []
+		_pending_commands[peer].append(command)
+		last_queued = command.sequence
+	_last_queued_command_sequence[peer] = last_queued
+
+	# Ack once for the whole bundle, then process events in order
+	_last_acked_event_sequence[peer] = bundle.ack_sequence
+	for event in bundle.events:
+		_process_incoming_event(peer, event)
+
+func _process_incoming_event(peer: int, event: SnapEvent) -> void:
+	if not get_node(event.node_path).has_permission(peer):
+		return # Silent return if not permission
+	var expected_sequence: int = _last_received_client_event_sequence.get(peer, 0) + 1
+	if event.sequence == expected_sequence:
+		_last_received_client_event_sequence[peer] = event.sequence
+		expected_sequence += 1
+		event.sequence = _event_sequence
+		_event_sequence += 1
+		upcoming_events.append(event)
+		_pending_out_events[event.sequence] = event
+		while _future_queued_events.has(peer) and _future_queued_events[peer].has(expected_sequence):
+			_last_received_client_event_sequence[peer] = expected_sequence
+			event = _future_queued_events[peer][expected_sequence]
+			_future_queued_events[peer].erase(expected_sequence)
+			event.sequence = _event_sequence
+			_event_sequence += 1
+			upcoming_events.append(event)
+			_pending_out_events[_event_sequence] = event
+			expected_sequence += 1
+	elif event.sequence < expected_sequence:
+		return # Outdated sequence, ignore
+	else:
+		if not _future_queued_events.has(peer): _future_queued_events[peer] = {}
+		_future_queued_events[peer][event.sequence] = event # Future sequence, queue for later
+
+## Gathers latest command + redundant unacked commands, oldest to newest.
+func _collect_redundant_commands(latest_sequence: int) -> Array[SnapCommand]:
+	var out: Array[SnapCommand] = []
+	var start_sequence: int = maxi(_last_acked_command_sequence + 1, latest_sequence - _COMMAND_REDUNDANCY + 1)
+	for seq in range(start_sequence, latest_sequence + 1):
+		var command: SnapCommand = _command_history[seq & _SEQ_BUFFER_MASK]
+		if command != null and command.sequence == seq:
+			out.append(command)
+	return out
+
+## Events not yet acknowledged by [param peer].
+func _outbound_events_for(peer: int) -> Array[SnapEvent]:
+	var out: Array[SnapEvent] = []
+	for sequence in _pending_out_events:
+		if sequence < _last_acked_event_sequence.get(peer, 0):
+			continue
+		out.append(_pending_out_events[sequence])
+	return out
 
 @rpc("authority", "unreliable_ordered", "call_remote")
 func _receive_snapshot(encoded_snapshot) -> void:
@@ -569,51 +626,6 @@ func _collect_events() -> Dictionary[int, SnapEvent]:
 			event.caller = multiplayer.get_unique_id()
 			_pending_out_events[event.sequence] = event
 	return _pending_out_events
-
-@rpc("any_peer", "unreliable_ordered", "call_remote")
-func _receive_events(encoded_event: PackedByteArray, ack_sequence: int) -> void:
-	var peer := multiplayer.get_remote_sender_id()
-	# Decode
-	var event := SnapEvent.new().decode(encoded_event)
-	_last_acked_event_sequence[peer] = ack_sequence
-	
-	# Validate event request
-	if not get_node(event.node_path).has_permission(peer):
-		return # Silent return if not permission
-	
-	# Check sequencing
-	# We will only accept the next sequence from that peer. Outdated sequences will be ignored.
-	# Sequences newer than the next should be queued until we've received all sequences inbetween.
-	# This ensures events play in the exact order of execution, and that no events are skipped.
-	var expected_sequence: int = _last_received_client_event_sequence.get(peer, 0) + 1
-	if event.sequence == expected_sequence:
-		# Ack peer sequence
-		_last_received_client_event_sequence[peer] = event.sequence
-		expected_sequence += 1
-		# Assign event sequencing and increment
-		event.sequence = _event_sequence
-		_event_sequence += 1
-		# Play event locally
-		upcoming_events.append(event)
-		# Prep event for relay
-		_pending_out_events[event.sequence] = event
-		# Check for queued events
-		while _future_queued_events.has(peer) and _future_queued_events[peer].has(expected_sequence):
-			_last_received_client_event_sequence[peer] = expected_sequence
-			event = _future_queued_events[peer][expected_sequence]
-			_future_queued_events.erase(expected_sequence) # Remove from queue
-			# Assign event sequencing and increment
-			event.sequence = _event_sequence
-			_event_sequence += 1
-			# Play event locally
-			upcoming_events.append(event)
-			# Prep event for relay
-			_pending_out_events[_event_sequence] = event
-			expected_sequence += 1
-	elif event.sequence < expected_sequence: # Outdated sequence, ignore
-		return
-	else: # Future sequence, arrived out of order
-		_future_queued_events[peer][event.sequence] = event # Queue for later
 
 @rpc("authority", "unreliable_ordered", "call_remote")
 func _relay_events(encoded_event: PackedByteArray) -> void:
