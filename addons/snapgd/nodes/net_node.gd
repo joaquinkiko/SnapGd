@@ -30,51 +30,52 @@ func _ready() -> void:
 
 ## Reads command properties to [param command].
 func capture_command(command: SnapCommand) -> void:
-	for prop in command_properties:
+	for i in command_properties.size():
+		var prop := command_properties[i]
 		if prop.split(':').size() < 2: continue
 		var node: Node = root.get_node(prop.split(':', true, 2)[0])
-		var property: NodePath = prop.split(':', true ,2)[1]
+		var property: NodePath = prop.split(':', true, 2)[1]
 		if node == null || property.is_empty(): continue
-		command.data[_key(prop)] = node.get_indexed(property)
+		command.data[make_property_key(net_id, i)] = node.get_indexed(property)
 
 ## Writes [param command] back to this node.
 func apply_command(command: SnapCommand) -> void:
-	for prop in command_properties:
-		var key := _key(prop)
+	for i in command_properties.size():
+		var key := make_property_key(net_id, i)
 		if command.data.has(key):
+			var prop := command_properties[i]
 			if prop.split(':').size() < 2: continue
 			var node: Node = root.get_node(prop.split(':', true, 2)[0])
-			var property: NodePath = prop.split(':', true ,2)[1]
+			var property: NodePath = prop.split(':', true, 2)[1]
 			if node == null || property.is_empty(): continue
 			node.set_indexed(property, command.data[key])
 
 ## Read state properties to [param state].
 func capture_state(state: SnapState) -> void:
-	for prop in state_properties:
+	for i in state_properties.size():
+		var prop := state_properties[i]
 		if prop.split(':').size() < 2: continue
 		var node: Node = root.get_node(prop.split(':', true, 2)[0])
-		var property: NodePath = prop.split(':', true ,2)[1]
+		var property: NodePath = prop.split(':', true, 2)[1]
 		if node == null || property.is_empty(): continue
-		state.data[_key(prop)] = node.get_indexed(property)
+		state.data[make_property_key(net_id, i)] = node.get_indexed(property)
 
 ## Writes [param state] back to this node.
 func apply_state(state: SnapState) -> void:
-	for prop in state_properties:
-		var key := _key(prop)
+	for i in state_properties.size():
+		var key := make_property_key(net_id, i)
 		if state.data.has(key):
+			var prop := state_properties[i]
 			if prop.split(':').size() < 2: continue
 			var node: Node = root.get_node(prop.split(':', true, 2)[0])
-			var property: NodePath = prop.split(':', true ,2)[1]
+			var property: NodePath = prop.split(':', true, 2)[1]
 			if node == null || property.is_empty(): continue
 			node.set_indexed(property, state.data[key])
 
 ## Gets reconciliation offset for visual properties.
-func get_render_offset(prop: String) -> Variant:
-	return SnapAPI.render_offsets.get(_key(prop))
-
-func _key(prop: String) -> StringName:
-	return StringName("%s:%s" % [get_path(), prop])
+func get_render_offset(index: int) -> Variant:
+	return SnapAPI.render_offsets.get(make_property_key(net_id, index))
 
 ## Clears reconciliation offset for this property, forcing an instant snap.
-func clear_render_offset(prop: String) -> void:
-	SnapAPI.render_offsets.erase(_key(prop))
+func clear_render_offset(index: int) -> void:
+	SnapAPI.render_offsets.erase(make_property_key(net_id, index))

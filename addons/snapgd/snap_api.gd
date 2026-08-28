@@ -36,7 +36,7 @@ var _state_history: Array[SnapState]
 var _pending_snapshot: Snapshot
 ## Leftover visual-only properties after soft correction.
 ## Decays toward empty every client tick.
-var render_offsets: Dictionary[StringName, Variant]
+var render_offsets: Dictionary[int, Variant]
 ## Sequence of the last event processed by the client.
 ## NOT last event received, as some events may be queued for later.
 var _last_processed_event_sequence: int
@@ -247,7 +247,9 @@ func _on_client_tick(delta: float) -> void:
 			store_for_future_tick.append(event)
 			continue # Don't erase yet
 		# Ready to be simulated
-		get_node(event.node_path).apply_event(event.event_name, event.args, event.caller, event.tick)
+		var net_event := _net_identifiables.get(event.net_id) as NetEvent
+		if net_event == null: continue # Unresolved identifiable, drop for now
+		net_event.apply_event(event.event_index, event.args, event.caller, event.tick)
 		events_simulated += 1
 		if events_simulated >= max_events_per_tick: break
 	upcoming_events = store_for_future_tick # Clean up queue with only future events
@@ -298,7 +300,9 @@ func _on_server_tick(delta: float) -> void:
 			store_for_future_tick.append(event)
 			continue # Don't erase yet
 		# Ready to be simulated
-		get_node(event.node_path).apply_event(event.event_name, event.args, event.caller, event.tick)
+		var net_event := _net_identifiables.get(event.net_id) as NetEvent
+		if net_event == null: continue # Unresolved identifiable, drop for now
+		net_event.apply_event(event.event_index, event.args, event.caller, event.tick)
 		events_simulated += 1
 		if events_simulated >= max_events_per_tick: break
 	upcoming_events = store_for_future_tick # Clean up queue with only future events
@@ -533,8 +537,10 @@ func _receive_input_bundle(encoded_bundle: PackedByteArray) -> void:
 		_process_incoming_event(peer, event)
 
 func _process_incoming_event(peer: int, event: SnapEvent) -> void:
-	if not get_node(event.node_path).has_permission(peer):
-		return # Silent return if not permission
+	var net_event := _net_identifiables.get(event.net_id) as NetEvent
+	if net_event == null: return # Unresolved identifiable, ignore for now
+	if not net_event.has_permission(peer):
+		return
 	var expected_sequence: int = _last_received_client_event_sequence.get(peer, 0) + 1
 	if event.sequence == expected_sequence:
 		_last_received_client_event_sequence[peer] = event.sequence
@@ -583,8 +589,19 @@ func _receive_snapshot(encoded_snapshot) -> void:
 	if multiplayer.is_server(): return # Only server -> peer
 	# Decode
 	var snapshot := Snapshot.new().decode(encoded_snapshot)
+	if _has_unresolved_identifiables(snapshot):
+		# Unknown net_id referenced, skip and don't ack
+		return
 	# Add command to be reconciled
 	_pending_snapshot = snapshot
+
+## Check if snapshot contains reference to unknown ID
+func _has_unresolved_identifiables(snapshot: Snapshot) -> bool:
+	for state in snapshot.states:
+		for key in state.data:
+			if not _net_identifiables.has(NetIdentifiable.id_from_key(key)):
+				return true
+	return false
 
 ## Sets up time when connecting to server
 func _timer_reset() -> void:
@@ -673,8 +690,8 @@ func _collect_events() -> Dictionary[int, SnapEvent]:
 			event.sequence = _event_sequence
 			_event_sequence += 1
 			event.tick = _current_tick
-			event.node_path = net_event.get_path()
-			event.event_name = pending_event[0]
+			event.net_id = net_event.net_id
+			event.event_index = pending_event[0]
 			event.args = pending_event[1]
 			event.caller = multiplayer.get_unique_id()
 			_pending_out_events[event.sequence] = event

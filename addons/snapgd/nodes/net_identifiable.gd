@@ -9,3 +9,12 @@ func _enter_tree() -> void:
 
 func _exit_tree() -> void:
 	SnapAPI.unregister_net_identifiable(self)
+
+## Combines a net_id and property/event index into one dictionary key.
+## Assumes index < 65536.
+static func make_property_key(net_id: int, index: int) -> int:
+	return (net_id << 16) | index
+
+## Extracts the net_id portion from a key made by [method make_property_key].
+static func id_from_key(key: int) -> int:
+	return key >> 16

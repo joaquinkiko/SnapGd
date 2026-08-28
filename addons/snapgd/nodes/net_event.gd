@@ -46,7 +46,8 @@ func _ready() -> void:
  
 ## Calls event to be executed over the network.
 func call_event(event_name: StringName, args: Array = []) -> void:
-	if !events.has(event_name):
+	var index := events.find(event_name)
+	if index == -1:
 		push_warning("Event '%s' cannot be found in approved events list"%event_name)
 		return
 	if !has_local_permission():
@@ -54,8 +55,8 @@ func call_event(event_name: StringName, args: Array = []) -> void:
 		return
 	# Call locally for responsiveness
 	var event := SnapEvent.new()
-	event.node_path = self.get_path()
-	event.event_name = event_name
+	event.net_id = net_id
+	event.event_index = index
 	event.args = args
 	event.tick = SnapAPI.current_tick + 1 # Pending events simulate during next tick
 	event.caller = multiplayer.get_unique_id()
@@ -65,10 +66,11 @@ func call_event(event_name: StringName, args: Array = []) -> void:
 	_pending.append([event_name, args])
  
 ## Applies event locally only. Doesn't self validate, use [function has_permission] beforehand.
-func apply_event(event_name: StringName, args: Array, caller: int, tick: int) -> void:
-	if !events.has(event_name):
-		push_warning("Event '%s' cannot be found in approved events list"%event_name)
+func apply_event(event_index: int, args: Array, caller: int, tick: int) -> void:
+	if event_index < 0 || event_index >= events.size():
+		push_warning("Event index %d out of range"%event_index)
 		return
+	var event_name: StringName = events[event_index]
 	current_event_caller = caller
 	if caller == multiplayer.get_unique_id():
 		root.callv(event_name, args)

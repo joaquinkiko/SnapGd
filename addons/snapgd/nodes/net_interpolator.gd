@@ -18,7 +18,7 @@ const _BUFFER_SIZE := 32
 ## Stores received snapshots to interpolate over.
 var _snapshot_buffer: Array[Snapshot] = []
 ## Stored offsets for smoothing reconciliation.
-var _applied_offsets: Dictionary[StringName, Variant] = {}
+var _applied_offsets: Dictionary[int, Variant] = {}
  
 func _ready() -> void:
 	if net_node == null:
@@ -68,7 +68,9 @@ func _apply_interpolation() -> void:
 		if prop.split(':').size() < 2: continue
 		var node_path: String = prop.split(':', true, 2)[0]
 		var property: NodePath = prop.split(':', true, 2)[1]
-		var key := _state_key(prop)
+		var index := net_node.state_properties.find(prop)
+		if index == -1: continue
+		var key := NetIdentifiable.make_property_key(net_node.net_id, index)
 		if !from_state.data.has(key) || !to_state.data.has(key): continue
 		var node: Node = net_node.root.get_node(node_path)
 		if node == null: continue
@@ -81,24 +83,27 @@ func _apply_smoothing_offsets() -> void:
 		if prop.split(':').size() < 2: continue
 		var node_path: String = prop.split(':', true, 2)[0]
 		var property: NodePath = prop.split(':', true, 2)[1]
-		var offset: Variant = net_node.get_render_offset(prop)
+		var index := net_node.state_properties.find(prop)
+		if index == -1: continue
+		var offset: Variant = net_node.get_render_offset(index)
 		if offset == null: continue
 		if _variant_magnitude(offset) > snap_threshold:
 			# Error too large, snap instead of blend
-			net_node.clear_render_offset(prop)
+			net_node.clear_render_offset(index)
 			continue
 		var node: Node = net_node.root.get_node(node_path)
 		if node == null: continue
 		node.set_indexed(property, node.get_indexed(property) + offset)
-		_applied_offsets[_state_key(prop)] = offset
+		_applied_offsets[NetIdentifiable.make_property_key(net_node.net_id, index)] = offset
  
 ## Called pre-tick-loop
 func _remove_smoothing_offsets() -> void:
 	if _applied_offsets.is_empty(): return
 	for prop in smoothed_properties:
-		var key := _state_key(prop)
+		var index := net_node.state_properties.find(prop)
+		if index == -1: continue
+		var key := NetIdentifiable.make_property_key(net_node.net_id, index)
 		if !_applied_offsets.has(key): continue
-		if prop.split(':').size() < 2: continue
 		var node_path: String = prop.split(':', true, 2)[0]
 		var property: NodePath = prop.split(':', true, 2)[1]
 		var node: Node = net_node.root.get_node(node_path)
@@ -106,9 +111,6 @@ func _remove_smoothing_offsets() -> void:
 		node.set_indexed(property, node.get_indexed(property) - _applied_offsets[key])
 	_applied_offsets.clear()
  
-func _state_key(prop: String) -> StringName:
-	return StringName("%s:%s" % [net_node.get_path(), prop])
-
 # Interpolate numbers. For non-numerical types, will snap to newer value.
 func _lerp_variant(a: Variant, b: Variant, t: float) -> Variant:
 	match typeof(a):
