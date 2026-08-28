@@ -8,6 +8,8 @@ const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
 const _RECONCILIATION_EPSILON := 0.001
 ## Max redundant commands sent per bundle (to help with packet loss)
 const _COMMAND_REDUNDANCY_MARGIN := 3
+## Default max bytes per outbound snapshot payload
+const _DEFAULT_SNAPSHOT_BYTE_LIMIT := 1200
 
 ## Emitted once before any ticks are processed this frame. Any data
 ## that doesn't change more than once per frame should be sampled here.
@@ -76,6 +78,8 @@ var _pending_removed_identifiables: Array[int]
 var _peer_confirmed_state: Dictionary[int, Dictionary]
 ## Per-peer state sent-but-unconfirmed, by tick: {tick: {key: value}}.
 var _peer_pending_sends: Dictionary[int, Dictionary]
+## Per-peer override for snapshot byte limit
+var _peer_snapshot_byte_limits: Dictionary[int, int]
 
 # Shared server and client data
 
@@ -364,8 +368,11 @@ func _build_snapshot_for_peer(peer: int, current_data: Dictionary) -> Snapshot:
 			var index: int = key & 0xFFFF
 			if not changed.has(net_id): changed[net_id] = {}
 			changed[net_id][index] = current_data[key]
+	var ordered := _order_owned_first(peer, changed)
+	var limit: int = _peer_snapshot_byte_limits.get(peer, _DEFAULT_SNAPSHOT_BYTE_LIMIT)
+	var included := _fit_groups_to_limit(ordered, limit)
 	var delta := SnapStateDelta.new()
-	delta.data = _order_owned_first(peer, changed)
+	delta.data = included
 	snapshot.state_delta = delta
 	# Track what we attempted to send this tick, pending confirmation
 	if not delta.data.is_empty():
@@ -373,6 +380,34 @@ func _build_snapshot_for_peer(peer: int, current_data: Dictionary) -> Snapshot:
 		if not _peer_pending_sends.has(peer): _peer_pending_sends[peer] = {}
 		_peer_pending_sends[peer][_current_tick] = flat
 	return snapshot
+
+
+## Includes whole net_id groups in order until adding the next would exceed [param limit].
+## Always includes at least the first group, even if it alone exceeds the limit,
+## this ensures an oversized group doesn't stall forever, never being sent.
+func _fit_groups_to_limit(ordered: Dictionary[int, Dictionary], limit: int) -> Dictionary[int, Dictionary]:
+	var included: Dictionary[int, Dictionary] = {}
+	var running_size := 4 # group count header (u32)
+	for net_id in ordered:
+		var group_bytes: int = _encode_group(net_id, ordered[net_id]).size()
+		if not included.is_empty() and running_size + group_bytes > limit:
+			break
+		running_size += group_bytes
+		included[net_id] = ordered[net_id]
+	return included
+
+## Encodes a single [param net_id]'s property group, matching SnapStateDelta's per-group format.
+func _encode_group(net_id: int, indices: Dictionary) -> PackedByteArray:
+	var raw := StreamPeerBuffer.new()
+	raw.put_32(net_id)
+	var bitmask := 0
+	for index in indices:
+		bitmask |= (1 << index)
+	raw.put_32(bitmask)
+	for index in range(32):
+		if bitmask & (1 << index):
+			SnapEncodable.write_variant(raw, indices[index])
+	return raw.data_array
 
 ## Reorders [param changed] so nodes owned by [param peer] come first.
 func _order_owned_first(peer: int, changed: Dictionary[int, Dictionary]) -> Dictionary[int, Dictionary]:
@@ -854,3 +889,7 @@ func _confirm_peer_snapshot(peer: int, tick: int) -> void:
 	for pending_tick in _peer_pending_sends[peer].keys():
 		if pending_tick <= tick:
 			_peer_pending_sends[peer].erase(pending_tick)
+
+## Sets a custom snapshot byte limit for [param peer]. Overrides the default.
+func set_snapshot_byte_limit(peer: int, limit: int) -> void:
+	_peer_snapshot_byte_limits[peer] = maxi(1, limit)
