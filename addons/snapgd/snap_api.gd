@@ -76,6 +76,8 @@ var _peer_confirmed_state: Dictionary[int, Dictionary]
 var _peer_pending_sends: Dictionary[int, Dictionary]
 ## Per-peer override for snapshot byte limit
 var _peer_snapshot_byte_limits: Dictionary[int, int]
+## Snapshots since last send, per peer, per net_id, for nodes with pending changes.
+var _peer_priority_state: Dictionary[int, Dictionary]
 
 # Shared server and client data
 
@@ -378,9 +380,10 @@ func _build_snapshot_for_peer(peer: int, current_data: Dictionary) -> Snapshot:
 			var index: int = key & 0xFFFF
 			if not changed.has(net_id): changed[net_id] = {}
 			changed[net_id][index] = current_data[key]
-	var ordered := _order_owned_first(peer, changed)
+	var ordered := _order_by_priority(peer, changed)
 	var limit: int = _peer_snapshot_byte_limits.get(peer, _base_snapshot_byte_limit)
 	var included := _fit_groups_to_limit(ordered, limit)
+	_update_priority_state(peer, changed, included)
 	var delta := SnapStateDelta.new()
 	delta.data = included
 	snapshot.state_delta = delta
@@ -419,17 +422,36 @@ func _encode_group(net_id: int, indices: Dictionary) -> PackedByteArray:
 			SnapEncodable.write_variant(raw, indices[index])
 	return raw.data_array
 
-## Reorders [param changed] so nodes owned by [param peer] come first.
-func _order_owned_first(peer: int, changed: Dictionary[int, Dictionary]) -> Dictionary[int, Dictionary]:
+## Orders changed groups by [param peer]'s owned nodes, and then by:
+## [member NetNode.base_priority] * [member NetNode.multiplier] * snapshots-since-last-send.
+func _order_by_priority(peer: int, changed: Dictionary[int, Dictionary]) -> Dictionary[int, Dictionary]:
+	if not _peer_priority_state.has(peer): _peer_priority_state[peer] = {}
+	var state: Dictionary = _peer_priority_state[peer]
+	var scored: Array[Array] = []
+	for net_id in changed:
+		var node: NetNode = _net_identifiables.get(net_id)
+		if node.get_multiplayer_authority() == peer:
+			# Peer's owned nodes are always forced to top
+			scored.append([net_id, INF])
+		else: # Unowned
+			var base_priority: float = node.base_priority
+			var multiplier: float = node.priority_multiplier
+			var starved_count: int = state.get(net_id, 1)
+			scored.append([net_id, base_priority * multiplier * starved_count])
+	scored.sort_custom(func(a, b): return a[1] > b[1])
 	var ordered: Dictionary[int, Dictionary] = {}
-	for net_id in changed:
-		var node: NetIdentifiable = _net_identifiables.get(net_id)
-		if node is Node and node.get_multiplayer_authority() == peer:
-			ordered[net_id] = changed[net_id]
-	for net_id in changed:
-		if not ordered.has(net_id):
-			ordered[net_id] = changed[net_id]
+	for entry in scored:
+		ordered[entry[0]] = changed[entry[0]]
 	return ordered
+
+## Resets starve counters for sent groups, increments for skipped ones.
+func _update_priority_state(peer: int, changed: Dictionary[int, Dictionary], included: Dictionary[int, Dictionary]) -> void:
+	var state: Dictionary = _peer_priority_state[peer]
+	for net_id in changed:
+		if included.has(net_id):
+			state.erase(net_id) # sent, restarts at 1 next time it has pending changes
+		else:
+			state[net_id] = state.get(net_id, 1) + 1
 
 func _on_snapshot_received(snapshot: Snapshot) -> void:
 	snapshot_received.emit(snapshot)

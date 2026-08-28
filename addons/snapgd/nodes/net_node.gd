@@ -16,6 +16,13 @@ signal sample_input(command: SnapCommand)
 ## Server -> client properties (NodePath:Property:OptionalSubProperty)
 @export var state_properties: PackedStringArray
 
+## Base send priority for this [NetNode]'s properties.
+@export var base_priority: float = 1.0
+
+## Runtime multiplier on top of [member base_priority].
+## Set to 0 to suppress sending, or raise to temporarily boost it.
+var priority_multiplier: float = 1.0
+
 func _enter_tree() -> void:
 	super._enter_tree()
 	SnapAPI.register_net_node(self)
