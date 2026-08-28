@@ -7,6 +7,9 @@ var commands: Array[SnapCommand]
 var events: Array[SnapEvent]
 ## Last relayed event sequence this client has processed.
 var ack_sequence: int
+## Highest snapshot tick this client has successfully reconstructed.
+var last_received_snapshot_tick: int
+
 
 func encode() -> PackedByteArray:
 	var raw := StreamPeerBuffer.new()
@@ -17,6 +20,7 @@ func encode() -> PackedByteArray:
 	for event in events:
 		write_bytes(raw, event.encode())
 	write_int(raw, ack_sequence)
+	write_int(raw, last_received_snapshot_tick)
 	return raw.data_array
 
 func decode(bytes: PackedByteArray) -> SnapInputBundle:
@@ -29,4 +33,5 @@ func decode(bytes: PackedByteArray) -> SnapInputBundle:
 	for n in events.size():
 		events[n] = SnapEvent.new().decode(read_bytes(buffer))
 	ack_sequence = read_int(buffer)
+	last_received_snapshot_tick = read_int(buffer)
 	return self

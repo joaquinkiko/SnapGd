@@ -47,6 +47,10 @@ var _last_acked_command_sequence: int
 var _last_queued_command_sequence: Dictionary[int, int]
 ## Path->id mappings received before the node existed locally yet
 var _pending_path_ids: Dictionary[NodePath, int]
+## Client's last fully reconstructed world state (merged deltas applied).
+var _last_full_state: SnapState
+## Tick [member _last_full_state] corresponds to. 0 = none yet.
+var _last_full_state_tick: int
 
 # Server-side data
 
@@ -68,6 +72,10 @@ var _next_net_id: int = 1
 var _pending_identifiables: Array[NetIdentifiable]
 ## Identifiable IDs removed since last broadcast.
 var _pending_removed_identifiables: Array[int]
+## Per-peer confirmed state, key : value. Only holds values we know arrived.
+var _peer_confirmed_state: Dictionary[int, Dictionary]
+## Per-peer state sent-but-unconfirmed, by tick: {tick: {key: value}}.
+var _peer_pending_sends: Dictionary[int, Dictionary]
 
 # Shared server and client data
 
@@ -260,6 +268,7 @@ func _on_client_tick(delta: float) -> void:
 		bundle.commands = _collect_redundant_commands(command.sequence)
 		bundle.events = _outbound_events_for(1)
 		bundle.ack_sequence = _last_processed_event_sequence
+		bundle.last_received_snapshot_tick = _last_full_state_tick
 		_receive_input_bundle.rpc_id(1, bundle.encode())
 	# Predict command
 	_simulate_command(command)
@@ -321,13 +330,14 @@ func _on_server_tick(delta: float) -> void:
 		_simulate_command(command)
 	
 	if _current_tick % _ticks_per_snapshot == 0:
+		var world_state := SnapState.new()
+		for node in _net_nodes:
+			if is_instance_valid(node):
+				node.capture_state(world_state)
 		for peer in multiplayer.get_peers():
-			var snapshot := _build_snapshot(peer)
+			var snapshot := _build_snapshot_for_peer(peer, world_state.data)
 			snapshot.events = _outbound_events_for(peer)
-			# Send to peer (unreliable)
-			_receive_snapshot.rpc_id(peer,
-				snapshot.encode()
-			)
+			_receive_snapshot.rpc_id(peer, snapshot.encode())
 
 func _on_offline_tick(delta: float) -> void:
 	# Simulate local commands
@@ -341,25 +351,50 @@ func _on_offline_tick(delta: float) -> void:
 		node.capture_command(command)
 	_simulate_command(command)
 
-func _build_snapshot(peer: int) -> Snapshot:
+## Diffs current world data against peer's confirmed state, ordered owned-first.
+func _build_snapshot_for_peer(peer: int, current_data: Dictionary) -> Snapshot:
 	var snapshot := Snapshot.new()
 	snapshot.server_tick = _current_tick
 	snapshot.last_command_sequence = _last_command_sequence.get(peer, 0)
-	var state := SnapState.new()
-	state.sequence = snapshot.last_command_sequence
-	for node in _net_nodes:
-		if is_instance_valid(node):
-			node.capture_state(state)
-	snapshot.states.append(state)
+	var confirmed: Dictionary = _peer_confirmed_state.get(peer, {})
+	var changed: Dictionary[int, Dictionary] = {} # net_id : {index: value}, unordered for now
+	for key in current_data:
+		if not confirmed.has(key) or confirmed[key] != current_data[key]:
+			var net_id := NetIdentifiable.id_from_key(key)
+			var index: int = key & 0xFFFF
+			if not changed.has(net_id): changed[net_id] = {}
+			changed[net_id][index] = current_data[key]
+	var delta := SnapStateDelta.new()
+	delta.data = _order_owned_first(peer, changed)
+	snapshot.state_delta = delta
+	# Track what we attempted to send this tick, pending confirmation
+	if not delta.data.is_empty():
+		var flat := delta.flatten()
+		if not _peer_pending_sends.has(peer): _peer_pending_sends[peer] = {}
+		_peer_pending_sends[peer][_current_tick] = flat
 	return snapshot
 
+## Reorders [param changed] so nodes owned by [param peer] come first.
+func _order_owned_first(peer: int, changed: Dictionary[int, Dictionary]) -> Dictionary[int, Dictionary]:
+	var ordered: Dictionary[int, Dictionary] = {}
+	for net_id in changed:
+		var node: NetIdentifiable = _net_identifiables.get(net_id)
+		if node is Node and node.get_multiplayer_authority() == peer:
+			ordered[net_id] = changed[net_id]
+	for net_id in changed:
+		if not ordered.has(net_id):
+			ordered[net_id] = changed[net_id]
+	return ordered
+
 func _on_snapshot_received(snapshot: Snapshot) -> void:
-	if snapshot.states.is_empty():
-		return
 	snapshot_received.emit(snapshot)
 	for event in snapshot.events:
 		_process_relayed_event(event)
-	var authoritative_state: SnapState = snapshot.states.back()
+	if snapshot.state_delta.data.is_empty():
+		return
+	var authoritative_state := SnapState.new()
+	authoritative_state.sequence = snapshot.last_command_sequence
+	authoritative_state.data = snapshot.state_delta.flatten()
 	var acked_sequence: int = snapshot.last_command_sequence
 	_last_acked_command_sequence = maxi(_last_acked_command_sequence, acked_sequence)
 	# Discard history up to last processed sequence to avoid stale reads
@@ -533,6 +568,7 @@ func _receive_input_bundle(encoded_bundle: PackedByteArray) -> void:
 
 	# Ack once for the whole bundle, then process events in order
 	_last_acked_event_sequence[peer] = bundle.ack_sequence
+	_confirm_peer_snapshot(peer, bundle.last_received_snapshot_tick)
 	for event in bundle.events:
 		_process_incoming_event(peer, event)
 
@@ -589,18 +625,24 @@ func _receive_snapshot(encoded_snapshot) -> void:
 	if multiplayer.is_server(): return # Only server -> peer
 	# Decode
 	var snapshot := Snapshot.new().decode(encoded_snapshot)
-	if _has_unresolved_identifiables(snapshot):
+	var flat := snapshot.state_delta.flatten()
+	if _has_unresolved_identifiables(flat):
 		# Unknown net_id referenced, skip and don't ack
 		return
+	if _last_full_state == null:
+		_last_full_state = SnapState.new()
+	for key in flat:
+		_last_full_state.data[key] = flat[key]
+	_last_full_state.sequence = snapshot.last_command_sequence
+	_last_full_state_tick = snapshot.server_tick
 	# Add command to be reconciled
 	_pending_snapshot = snapshot
 
 ## Check if snapshot contains reference to unknown ID
-func _has_unresolved_identifiables(snapshot: Snapshot) -> bool:
-	for state in snapshot.states:
-		for key in state.data:
-			if not _net_identifiables.has(NetIdentifiable.id_from_key(key)):
-				return true
+func _has_unresolved_identifiables(data: Dictionary) -> bool:
+	for key in data:
+		if not _net_identifiables.has(NetIdentifiable.id_from_key(key)):
+			return true
 	return false
 
 ## Sets up time when connecting to server
@@ -716,9 +758,6 @@ func restore_compensators() -> void:
 	for comp in _net_compensators:
 		comp.restore()
 
-## TODO: Add delta compression handling (Snapshot.baseline_tick will
-## eventually be used to compress states_data in _receive_snapshot
-
 ## Registers [param node] for identification. Typically called when it enters tree.
 func register_net_identifiable(node: NetIdentifiable) -> void:
 	if multiplayer.is_server() \
@@ -804,3 +843,14 @@ func _receive_identification_removal(encoded_ids: PackedByteArray) -> void:
 	var count := buffer.get_32()
 	for n in count:
 		_net_identifiables.erase(buffer.get_32())
+
+## Merges a peer's confirmed tick into their confirmed state and clears earlier pending entries.
+func _confirm_peer_snapshot(peer: int, tick: int) -> void:
+	if not _peer_pending_sends.has(peer): return
+	if not _peer_pending_sends[peer].has(tick): return
+	if not _peer_confirmed_state.has(peer): _peer_confirmed_state[peer] = {}
+	for key in _peer_pending_sends[peer][tick]:
+		_peer_confirmed_state[peer][key] = _peer_pending_sends[peer][tick][key]
+	for pending_tick in _peer_pending_sends[peer].keys():
+		if pending_tick <= tick:
+			_peer_pending_sends[peer].erase(pending_tick)

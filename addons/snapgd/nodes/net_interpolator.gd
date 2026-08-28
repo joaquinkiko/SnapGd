@@ -57,9 +57,6 @@ func _apply_interpolation() -> void:
 			break
 	# Get reference states
 	if from == null || to == null: return
-	var from_state: SnapState = from.states.back() if !from.states.is_empty() else null
-	var to_state: SnapState = to.states.back() if !to.states.is_empty() else null
-	if from_state == null || to_state == null: return
 	# Where are we between states?
 	var span: float = maxf(1.0, to.server_tick - from.server_tick)
 	var t: float = clampf((render_tick - from.server_tick) / span, 0.0, 1.0)
@@ -71,10 +68,10 @@ func _apply_interpolation() -> void:
 		var index := net_node.state_properties.find(prop)
 		if index == -1: continue
 		var key := NetIdentifiable.make_property_key(net_node.net_id, index)
-		if !from_state.data.has(key) || !to_state.data.has(key): continue
+		if !from.state_delta.flatten().has(key) || !to.state_delta.data.has(key): continue
 		var node: Node = net_node.root.get_node(node_path)
 		if node == null: continue
-		node.set_indexed(property, _lerp_variant(from_state.data[key], to_state.data[key], t))
+		node.set_indexed(property, _lerp_variant(from.state_delta.flatten()[key], to.state_delta.data[key], t))
  
 ## Smoothly updates property based off provided offset
 func _apply_smoothing_offsets() -> void:
