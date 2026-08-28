@@ -6,10 +6,6 @@ const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
 ## Prediction errors below this should be ignored (assume floating point noise)
 const _RECONCILIATION_EPSILON := 0.001
-## Max redundant commands sent per bundle (to help with packet loss)
-const _COMMAND_REDUNDANCY_MARGIN := 3
-## Default max bytes per outbound snapshot payload
-const _DEFAULT_SNAPSHOT_BYTE_LIMIT := 1200
 
 ## Emitted once before any ticks are processed this frame. Any data
 ## that doesn't change more than once per frame should be sampled here.
@@ -170,6 +166,20 @@ var max_events_per_tick: int:
 	get: return _max_events_per_tick
 	set(value): _max_events_per_tick = maxi(1, _max_events_per_tick)
 var _max_events_per_tick: int = ProjectSettings.get_setting("SnapAPI/max_events_per_tick", 64)
+
+## Max redundant commands sent per bundle (to help with packet loss)
+var max_redundant_commands: int:
+	get: return _max_redundant_commands
+	set(value):
+		_max_redundant_commands = clampi(value, 0, _SEQ_BUFFER_SIZE - 1)
+var _max_redundant_commands: int = ProjectSettings.get_setting("SnapAPI/max_redundant_commands", 3)
+
+## Default max bytes per outbound snapshot payload
+var base_snapshot_byte_limit: int:
+	get: return _base_snapshot_byte_limit
+	set(value):
+		_base_snapshot_byte_limit = maxi(1, value)
+var _base_snapshot_byte_limit: int = ProjectSettings.get_setting("SnapAPI/snapshot_byte_limit", 1200)
 
 # Time calculation data
 
@@ -369,7 +379,7 @@ func _build_snapshot_for_peer(peer: int, current_data: Dictionary) -> Snapshot:
 			if not changed.has(net_id): changed[net_id] = {}
 			changed[net_id][index] = current_data[key]
 	var ordered := _order_owned_first(peer, changed)
-	var limit: int = _peer_snapshot_byte_limits.get(peer, _DEFAULT_SNAPSHOT_BYTE_LIMIT)
+	var limit: int = _peer_snapshot_byte_limits.get(peer, _base_snapshot_byte_limit)
 	var included := _fit_groups_to_limit(ordered, limit)
 	var delta := SnapStateDelta.new()
 	delta.data = included
@@ -638,7 +648,7 @@ func _process_incoming_event(peer: int, event: SnapEvent) -> void:
 ## Gathers latest command + redundant unacked commands, oldest to newest.
 func _collect_redundant_commands(latest_sequence: int) -> Array[SnapCommand]:
 	var out: Array[SnapCommand] = []
-	var span: int = _ticks_per_input_send + _COMMAND_REDUNDANCY_MARGIN
+	var span: int = _ticks_per_input_send + _max_redundant_commands
 	var start_sequence: int = maxi(_last_acked_command_sequence + 1, latest_sequence - span + 1)
 	for seq in range(start_sequence, latest_sequence + 1):
 		var command: SnapCommand = _command_history[seq & _SEQ_BUFFER_MASK]

@@ -37,6 +37,20 @@ const settings := [
 		"hint_string": "1,128,or_greater",
 		"default": 64,
 	},
+	{
+		"name": "SnapAPI/max_redundant_commands",
+		"type": TYPE_INT,
+		"hint": PROPERTY_HINT_RANGE,
+		"hint_string": "0,10,or_greater,prefer_slider",
+		"default": 3,
+	},
+	{
+		"name": "SnapAPI/snapshot_byte_limit",
+		"type": TYPE_INT,
+		"hint": PROPERTY_HINT_RANGE,
+		"hint_string": "512,1400,or_greater,prefer_slider",
+		"default": 1200,
+	},
 ]
 
 func _enable_plugin() -> void:
