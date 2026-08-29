@@ -235,6 +235,8 @@ func _ready() -> void:
 	_state_history.resize(_SEQ_BUFFER_SIZE)
 	multiplayer.connected_to_server.connect(_timer_reset)
 	multiplayer.peer_connected.connect(_send_identifiables_to_new_peer)
+	multiplayer.peer_disconnected.connect(_clean_up_peer)
+	multiplayer.server_disconnected.connect(_clean_up_self)
 	pre_tick_loop.connect(_broadcast_pending_identifiables)
 	pre_tick_loop.connect(_broadcast_pending_identifiable_removals)
 
@@ -997,3 +999,11 @@ func _observable_priority_factor(peer: int, observable: NetObservable) -> float:
 	# Only partially observable
 	var range_span: float = observer.max_range - observer.min_range
 	return 1.0 - ((distance - observer.min_range) / range_span)
+
+## Called when disconnected from server
+func _clean_up_self() -> void:
+	pass
+
+## Called when disconnected from peer
+func _clean_up_peer(peer: int) -> void:
+	pass
