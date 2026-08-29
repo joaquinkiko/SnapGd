@@ -668,6 +668,7 @@ func _receive_input_bundle(encoded_bundle: PackedByteArray) -> void:
 	_last_acked_event_sequence[peer] = bundle.ack_sequence
 	_confirm_peer_snapshot(peer, bundle.last_received_snapshot_tick)
 	for event in bundle.events:
+		event.caller = peer # Stop peer from spoofing caller field
 		_process_incoming_event(peer, event)
 
 func _process_incoming_event(peer: int, event: SnapEvent) -> void:
