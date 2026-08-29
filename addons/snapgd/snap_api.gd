@@ -1,6 +1,8 @@
 ## Global API for SnapGd
 extends Node
 
+## Bump whenever wire format changes in a way that breaks compatibility.
+const _PROTOCOL_VERSION := 1
 ## Sequence buffer size for outbound packets
 const _SEQ_BUFFER_SIZE := 128 # (MUST be power of 2)
 const _SEQ_BUFFER_MASK := _SEQ_BUFFER_SIZE - 1
@@ -82,6 +84,10 @@ var _peer_priority_state: Dictionary[int, Dictionary]
 var _net_id_to_observable: Dictionary[int, NetObservable]
 ## Each peer's currently active observer.
 var _current_observers: Dictionary[int, NetObserver]
+## Peers that have passed the validation, only these are treated as valid.
+var _validated_peers: Dictionary[int, bool]
+## Server-side timer per peer waiting on validation, to catch peers that never respond.
+var _pending_validation_peers: Dictionary[int, float]
 
 # Shared server and client data
 
@@ -212,6 +218,9 @@ var max_queued_events: int:
 		_max_queued_events = clampi(value, 0, _SEQ_BUFFER_SIZE - 1)
 var _max_queued_events: int = ProjectSettings.get_setting("SnapAPI/max_queued_events", 128)
 
+## How long a peer has to complete validation before being kicked.
+var validation_timeout: float = ProjectSettings.get_setting("SnapAPI/validation_timeout", 5.0)
+
 # Time calculation data
 
 ## Current mircoseconds between ticks
@@ -234,6 +243,8 @@ func _ready() -> void:
 	_command_history.resize(_SEQ_BUFFER_SIZE)
 	_state_history.resize(_SEQ_BUFFER_SIZE)
 	multiplayer.connected_to_server.connect(_timer_reset)
+	multiplayer.connected_to_server.connect(_send_validation)
+	multiplayer.peer_connected.connect(_start_validation_timeout)
 	multiplayer.peer_connected.connect(_send_identifiables_to_new_peer)
 	multiplayer.peer_disconnected.connect(_clean_up_peer)
 	multiplayer.server_disconnected.connect(_clean_up_self)
@@ -241,6 +252,7 @@ func _ready() -> void:
 	pre_tick_loop.connect(_broadcast_pending_identifiable_removals)
 
 func _process(delta: float) -> void:
+	_check_validation_timeouts()
 	if not _is_paused:
 		_handle_time(delta)
 		_process_ticks()
@@ -379,6 +391,7 @@ func _on_server_tick(delta: float) -> void:
 			if is_instance_valid(node):
 				node.capture_state(world_state)
 		for peer in multiplayer.get_peers():
+			if not _validated_peers.get(peer, false): continue # Hasn't been validated
 			var snapshot := _build_snapshot_for_peer(peer, world_state.data)
 			snapshot.events = _outbound_events_for(peer)
 			_receive_snapshot.rpc_id(peer, snapshot.encode())
@@ -651,6 +664,7 @@ func _receive_input_bundle(encoded_bundle: PackedByteArray) -> void:
 	if not multiplayer.is_server(): return # Only peer -> server
 	if _is_paused: return # Shouldn't queue commands while paused
 	var peer := multiplayer.get_remote_sender_id()
+	if not _validated_peers.get(peer, false): return # Hasn't completed validated
 	var bundle := SnapInputBundle.new().decode(encoded_bundle)
 
 	# Queue new commands only, skipping anything already simulated or already queued
@@ -1034,3 +1048,40 @@ func _clean_up_peer(peer: int) -> void:
 	_peer_snapshot_byte_limits.erase(peer)
 	_current_observers.erase(peer)
 	_last_queued_command_sequence.erase(peer)
+	_validated_peers.erase(peer)
+	_pending_validation_peers.erase(peer)
+
+func _start_validation_timeout(peer: int) -> void:
+	if not multiplayer.is_server(): return
+	_pending_validation_peers[peer] = Time.get_unix_time_from_system()
+
+## Sends protocol version and encoding settings to server to validate self.
+## This ensures that all parties are encoding data the same way in their packets.
+func _send_validation() -> void:
+	if multiplayer.is_server(): return
+	_receive_validation.rpc_id(1,
+		_PROTOCOL_VERSION,
+		SnapEncodable.int64,
+		SnapEncodable._double_floats
+	)
+
+@rpc("any_peer", "reliable", "call_remote")
+func _receive_validation(client_version: int, client_int64: bool, client_double_floats: bool) -> void:
+	if not multiplayer.is_server(): return # Only peer -> server
+	var peer := multiplayer.get_remote_sender_id()
+	if client_version == _PROTOCOL_VERSION \
+		and client_int64 == SnapEncodable.int64 \
+		and client_double_floats == SnapEncodable._double_floats:
+		_validated_peers[peer] = true
+		_pending_validation_peers.erase(peer)
+	else: # Peers encoding settings don't match
+		multiplayer.multiplayer_peer.disconnect_peer(peer)
+		_pending_validation_peers.erase(peer)
+
+## Kicks any peer that never completed validation in time. Call periodically.
+func _check_validation_timeouts() -> void:
+	if not multiplayer.is_server(): return
+	for peer in _pending_validation_peers.keys():
+		if Time.get_unix_time_from_system() - _pending_validation_peers[peer] > validation_timeout:
+			multiplayer.multiplayer_peer.disconnect_peer(peer)
+			_pending_validation_peers.erase(peer)

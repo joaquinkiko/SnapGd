@@ -72,6 +72,13 @@ const settings := [
 		"hint_string": "1,512,or_greater",
 		"default": 128,
 	},
+	{
+		"name": "SnapAPI/validation_timeout",
+		"type": TYPE_FLOAT,
+		"hint": PROPERTY_HINT_RANGE,
+		"hint_string": "1.0,10.0,or_greater",
+		"default": 5.0,
+	},
 ]
 
 func _enable_plugin() -> void:
