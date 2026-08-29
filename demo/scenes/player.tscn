@@ -6,6 +6,8 @@
 [ext_resource type="Script" uid="uid://b68b83n7whq8o" path="res://addons/snapgd/nodes/net_event.gd" id="5_s1jr8"]
 [ext_resource type="PackedScene" uid="uid://cgxwnhxus1cfr" path="res://demo/assets/3DGodotRobot.glb" id="5_vyyd1"]
 [ext_resource type="Script" uid="uid://c7hxfv2cn16ko" path="res://addons/snapgd/nodes/net_compensator.gd" id="6_ynbcj"]
+[ext_resource type="Script" uid="uid://xif70gtmx8c2" path="res://addons/snapgd/nodes/net_observer.gd" id="7_mm3sh"]
+[ext_resource type="Script" uid="uid://c62jxikvjf31l" path="res://addons/snapgd/nodes/net_observable.gd" id="8_grgt3"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_8483k"]
 height = 1.8
@@ -82,5 +84,16 @@ lag_compensated = true
 script = ExtResource("6_ynbcj")
 root = NodePath("..")
 compensated_properties = PackedStringArray(".:position")
+
+[node name="NetObserver" type="Node" parent="." unique_id=2011993673 node_paths=PackedStringArray("root")]
+script = ExtResource("7_mm3sh")
+root = NodePath("..")
+metadata/_custom_type_script = "uid://xif70gtmx8c2"
+
+[node name="NetObservable" type="Node" parent="." unique_id=1792496413 node_paths=PackedStringArray("root", "net_nodes")]
+script = ExtResource("8_grgt3")
+root = NodePath("..")
+net_nodes = [NodePath("../NetNode")]
+metadata/_custom_type_script = "uid://c62jxikvjf31l"
 
 [editable path="3DGodotRobot"]

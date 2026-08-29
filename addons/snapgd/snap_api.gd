@@ -78,6 +78,10 @@ var _peer_pending_sends: Dictionary[int, Dictionary]
 var _peer_snapshot_byte_limits: Dictionary[int, int]
 ## Snapshots since last send, per peer, per net_id, for nodes with pending changes.
 var _peer_priority_state: Dictionary[int, Dictionary]
+## Maps a managed NetNode's net_id to its owning observable.
+var _net_id_to_observable: Dictionary[int, NetObservable]
+## Each peer's currently active observer.
+var _current_observers: Dictionary[int, NetObserver]
 
 # Shared server and client data
 
@@ -89,6 +93,8 @@ var _net_nodes: Array[NetNode]
 var _net_events: Array[NetEvent]
 ## All registered [NetCompensator]s to be handled.
 var _net_compensators: Array[NetCompensator]
+## All registered [NetObservable]s to be handled.
+var _net_observables: Array[NetObservable]
 ## Current outbound event sequence.
 var _event_sequence: int = 1
 ## Events pending broadcast on next tick, sorted as {sequence : event}.
@@ -423,7 +429,8 @@ func _encode_group(net_id: int, indices: Dictionary) -> PackedByteArray:
 	return raw.data_array
 
 ## Orders changed groups by [param peer]'s owned nodes, and then by:
-## [member NetNode.base_priority] * [member NetNode.multiplier] * snapshots-since-last-send.
+## [member NetNode.base_priority] * [member NetNode.multiplier]
+## * snapshots-since-last-send * [NetObservable]-status.
 func _order_by_priority(peer: int, changed: Dictionary[int, Dictionary]) -> Dictionary[int, Dictionary]:
 	if not _peer_priority_state.has(peer): _peer_priority_state[peer] = {}
 	var state: Dictionary = _peer_priority_state[peer]
@@ -437,7 +444,10 @@ func _order_by_priority(peer: int, changed: Dictionary[int, Dictionary]) -> Dict
 			var base_priority: float = node.base_priority
 			var multiplier: float = node.priority_multiplier
 			var starved_count: int = state.get(net_id, 1)
-			scored.append([net_id, base_priority * multiplier * starved_count])
+			var observable_factor: float = 1.0
+			if _net_id_to_observable.has(net_id):
+				observable_factor = _observable_priority_factor(peer, _net_id_to_observable[net_id])
+			scored.append([net_id, base_priority * multiplier * starved_count * observable_factor])
 	scored.sort_custom(func(a, b): return a[1] > b[1])
 	var ordered: Dictionary[int, Dictionary] = {}
 	for entry in scored:
@@ -925,3 +935,39 @@ func _confirm_peer_snapshot(peer: int, tick: int) -> void:
 ## Sets a custom snapshot byte limit for [param peer]. Overrides the default.
 func set_snapshot_byte_limit(peer: int, limit: int) -> void:
 	_peer_snapshot_byte_limits[peer] = maxi(1, limit)
+
+func unregister_net_observer(observer: NetObserver) -> void:
+	for peer in _current_observers.keys():
+		if _current_observers[peer] == observer:
+			_current_observers.erase(peer)
+
+func set_current_observer(peer: int, observer: NetObserver) -> void:
+	_current_observers[peer] = observer
+
+func register_net_observable(observable: NetObservable) -> void:
+	_net_observables.append(observable)
+	for node in observable.net_nodes:
+		_net_id_to_observable[node.net_id] = observable
+
+func unregister_net_observable(observable: NetObservable) -> void:
+	_net_observables.erase(observable)
+	for node in observable.net_nodes:
+		_net_id_to_observable.erase(node.net_id)
+
+## 0-1 priority factor for how visible observable is to peer's current [NetObserver].
+func _observable_priority_factor(peer: int, observable: NetObservable) -> float:
+	var observer: NetObserver = _current_observers.get(peer)
+	if observer == null: return 1.0 # No observer set, don't restrict
+	var observer_position: Variant = observer.get_position()
+	var observable_position: Variant = observable.get_position()
+	if observer_position == null || observable_position == null \
+	|| typeof(observer_position) != typeof(observable_position):
+		return 1.0 # Invalid comparison, don't restrict
+	var distance: float = observer_position.distance_to(observable_position)
+	if distance <= observer.min_range:
+		return 1.0 # Within full observation
+	if distance >= observer.max_range:
+		return 0.0 # Outside observation
+	# Only partially observable
+	var range_span: float = observer.max_range - observer.min_range
+	return 1.0 - ((distance - observer.min_range) / range_span)
