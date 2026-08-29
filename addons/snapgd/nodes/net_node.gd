@@ -4,7 +4,7 @@ class_name NetNode extends NetIdentifiable
 ## Emitted for owner/server when this node should simulate and update it's state
 signal simulate_command(delta: float)
 ## Emitted for owner when this node should gather command values
-signal sample_input(command: SnapCommand)
+signal sample_input(delta: float)
 
 ## Properties paths will be relative to this node.
 ## If left empty, will use self as root.

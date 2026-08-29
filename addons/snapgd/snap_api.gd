@@ -299,7 +299,7 @@ func _on_client_tick(delta: float) -> void:
 	command.tick = _current_tick
 	# Ensure input data is populated before capturing commands
 	for node in _owned_net_nodes():
-		node.sample_input.emit(command)
+		node.sample_input.emit(delta)
 	# Capture sampled data
 	for node in _owned_net_nodes():
 		node.capture_command(command)
@@ -380,7 +380,7 @@ func _on_server_tick(delta: float) -> void:
 		command.sequence = _command_sequence
 		command.tick = _current_tick
 		for node in _owned_net_nodes():
-			node.sample_input.emit(command)
+			node.sample_input.emit(delta)
 		for node in _owned_net_nodes():
 			node.capture_command(command)
 		_simulate_command(command)
@@ -402,7 +402,7 @@ func _on_offline_tick(delta: float) -> void:
 	command.sequence = _command_sequence
 	command.tick = _current_tick
 	for node in _owned_net_nodes():
-		node.sample_input.emit(command)
+		node.sample_input.emit(delta)
 	for node in _owned_net_nodes():
 		node.capture_command(command)
 	_simulate_command(command)

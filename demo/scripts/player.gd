@@ -76,7 +76,7 @@ func _input(event: InputEvent) -> void:
 	if Input.is_action_just_pressed("ui_focus_next"): # (Tab)
 		$NetEvent.call_event(&"event_speak", ["Server" if multiplayer.is_server() else "Client"])
 
-func _gather_input(_command: SnapCommand) -> void:
+func _gather_input(_delta: float) -> void:
 	if not is_multiplayer_authority(): return
 	# Get move direction
 	input_dir.x = int(Input.is_key_label_pressed(KEY_D)) - int(Input.is_key_label_pressed(KEY_A))
