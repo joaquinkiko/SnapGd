@@ -682,7 +682,7 @@ func _process_incoming_event(peer: int, event: SnapEvent) -> void:
 	if event.sequence == expected_sequence:
 		_last_received_client_event_sequence[peer] = event.sequence
 		expected_sequence += 1
-		if net_event != null && net_event.has_permission(peer):
+		if net_event != null && net_event.has_permission(peer) && net_event.validate_event(event):
 			event.sequence = _event_sequence
 			_event_sequence += 1
 			upcoming_events.append(event)
@@ -692,7 +692,7 @@ func _process_incoming_event(peer: int, event: SnapEvent) -> void:
 			event = _future_queued_events[peer][expected_sequence]
 			_future_queued_events[peer].erase(expected_sequence)
 			net_event = _net_identifiables.get(event.net_id) as NetEvent
-			if net_event != null && net_event.has_permission(peer):
+			if net_event != null && net_event.has_permission(peer) && net_event.validate_event(event):
 				event.sequence = _event_sequence
 				_event_sequence += 1
 				upcoming_events.append(event)

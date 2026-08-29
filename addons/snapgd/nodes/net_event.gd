@@ -29,6 +29,9 @@ enum Rule {
 ## Events pending executions, sorted [event, args].
 var _pending: Array[Array] = []
  
+## Cached argument info by event index [min_args, max_args, types: Array[int]]
+var _event_signatures: Array[Array]
+
 func _enter_tree() -> void:
 	super._enter_tree()
 	SnapAPI.register_net_event(self)
@@ -43,6 +46,21 @@ func _ready() -> void:
 			root.get_parent()
 		else:
 			root = self
+	# Checks events, and caches info on what is considered valid for them
+	_event_signatures.resize(events.size())
+	var methods := root.get_method_list()
+	for method in methods:
+		if not events.has(method["name"]): continue
+		var args: Array = method["args"]
+		var default_count: int = method.get("default_args", []).size()
+		var types: Array[int] = []
+		for arg in args:
+			types.append(arg["type"])
+		_event_signatures[events.find(method["name"])] = [
+			args.size() - default_count,
+			args.size(),
+			types,
+		]
  
 ## Calls event to be executed over the network.
 func call_event(event_name: StringName, args: Array = []) -> void:
@@ -101,3 +119,22 @@ func has_local_permission() -> bool:
 		Rule.SERVER: return multiplayer.is_server()
 		Rule.ANYONE: return true
 		_: return false
+
+## Validates [param event]'s args and returns true if the event is safe to apply.
+func validate_event(event: SnapEvent) -> bool:
+	if event.event_index < 0 or event.event_index >= events.size():
+		return false
+	if _event_signatures[event.event_index].is_empty():
+		return false # Function doesn't exist on root, or wasn't found at _ready time
+	var signature: Array = _event_signatures[event.event_index]
+	var arg_count: int = event.args.size()
+	if arg_count < signature[0] or arg_count > signature[1]:
+		return false # Too litte/many arguments provided
+	var types: Array = signature[2]
+	for i in arg_count:
+		var expected_type: int = types[i]
+		if expected_type == TYPE_NIL:
+			continue # Untyped parameter, accept any type
+		if typeof(event.args[i]) != expected_type:
+			return false
+	return true
