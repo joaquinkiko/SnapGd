@@ -189,6 +189,29 @@ var base_snapshot_byte_limit: int:
 		_base_snapshot_byte_limit = maxi(1, value)
 var _base_snapshot_byte_limit: int = ProjectSettings.get_setting("SnapAPI/snapshot_byte_limit", 1200)
 
+## Limit on how far ahead server will store events for client, to prevent DoS attacks.
+var max_client_pending_events: int:
+	get: return _max_client_pending_events
+	set(value):
+		_max_client_pending_events = clampi(value, 0, _SEQ_BUFFER_SIZE - 1)
+var _max_client_pending_events: int = ProjectSettings.get_setting("SnapAPI/max_client_pending_events", 16)
+
+## Max amount of commands server will leave pending from a single client before tossing new ones.
+## This prevents DoS attack, and avoids potential cheating.
+var max_client_pending_commands: int:
+	get: return _max_client_pending_commands
+	set(value):
+		_max_client_pending_commands = clampi(value, 0, _SEQ_BUFFER_SIZE - 1)
+var _max_client_pending_commands: int = ProjectSettings.get_setting("SnapAPI/max_client_pending_commands", 32)
+
+## Limit events that can be queued for next tick, preventing DoS attacks.
+## Unlike [member max_client_pending_commands], this applies regardless of sender.
+var max_queued_events: int:
+	get: return _max_queued_events
+	set(value):
+		_max_queued_events = clampi(value, 0, _SEQ_BUFFER_SIZE - 1)
+var _max_queued_events: int = ProjectSettings.get_setting("SnapAPI/max_queued_events", 128)
+
 # Time calculation data
 
 ## Current mircoseconds between ticks
@@ -635,6 +658,8 @@ func _receive_input_bundle(encoded_bundle: PackedByteArray) -> void:
 			continue # Already simulated or already queued from an earlier bundle
 		if not _pending_commands.has(peer):
 			_pending_commands[peer] = []
+		if _pending_commands[peer].size() >= _max_client_pending_commands:
+			break # peer is flooding or badly desynced, toss this command and any others
 		_pending_commands[peer].append(command)
 		last_queued = command.sequence
 	_last_queued_command_sequence[peer] = last_queued
@@ -646,6 +671,8 @@ func _receive_input_bundle(encoded_bundle: PackedByteArray) -> void:
 		_process_incoming_event(peer, event)
 
 func _process_incoming_event(peer: int, event: SnapEvent) -> void:
+	if upcoming_events.size() >= max_queued_events:
+		return # Event overflow, need to flush current before accepting more
 	var net_event := _net_identifiables.get(event.net_id) as NetEvent
 	if net_event == null: return # Unresolved identifiable, ignore for now
 	if not net_event.has_permission(peer):
@@ -669,6 +696,8 @@ func _process_incoming_event(peer: int, event: SnapEvent) -> void:
 			expected_sequence += 1
 	elif event.sequence < expected_sequence:
 		return # Outdated sequence, ignore
+	elif event.sequence - expected_sequence > _max_client_pending_events:
+		return # Sequence is too far ahead, ignore for now
 	else:
 		if not _future_queued_events.has(peer): _future_queued_events[peer] = {}
 		_future_queued_events[peer][event.sequence] = event # Future sequence, queue for later

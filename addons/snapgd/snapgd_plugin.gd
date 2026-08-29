@@ -51,6 +51,27 @@ const settings := [
 		"hint_string": "512,1400,or_greater,prefer_slider",
 		"default": 1200,
 	},
+	{
+		"name": "SnapAPI/max_client_pending_events",
+		"type": TYPE_INT,
+		"hint": PROPERTY_HINT_RANGE,
+		"hint_string": "8,64,or_greater,prefer_slider",
+		"default": 16,
+	},
+	{
+		"name": "SnapAPI/max_client_pending_commands",
+		"type": TYPE_INT,
+		"hint": PROPERTY_HINT_RANGE,
+		"hint_string": "8,128,or_greater,prefer_slider",
+		"default": 32,
+	},
+	{
+		"name": "SnapAPI/max_queued_events",
+		"type": TYPE_INT,
+		"hint": PROPERTY_HINT_RANGE,
+		"hint_string": "1,512,or_greater",
+		"default": 128,
+	},
 ]
 
 func _enable_plugin() -> void:
