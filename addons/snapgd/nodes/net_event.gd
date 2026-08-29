@@ -61,6 +61,10 @@ func _ready() -> void:
 			args.size(),
 			types,
 		]
+	for n in _event_signatures.size():
+		if _event_signatures[n].is_empty():
+			# Function wasn't found in parent
+			push_error("Event '%s' wasn't found on '%s'"%[events[n], root.name])
  
 ## Calls event to be executed over the network.
 func call_event(event_name: StringName, args: Array = []) -> void:

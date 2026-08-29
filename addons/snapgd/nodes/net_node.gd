@@ -34,6 +34,26 @@ func _exit_tree() -> void:
 func _ready() -> void:
 	if root == null:
 		root = self
+	for n in state_properties.size():
+		var prop := state_properties[n]
+		if prop.split(':').size() < 2:
+			push_error("Property '%s' wasn't found on '%s'"%[state_properties[n], root.name])
+			continue
+		var node: Node = root.get_node(prop.split(':', true, 2)[0])
+		var property: NodePath = prop.split(':', true, 2)[1]
+		if node == null || property.is_empty():
+			push_error("Property '%s' wasn't found on '%s'"%[state_properties[n], root.name])
+			continue
+	for n in command_properties.size():
+		var prop := command_properties[n]
+		if prop.split(':').size() < 2:
+			push_error("Property '%s' wasn't found on '%s'"%[state_properties[n], root.name])
+			continue
+		var node: Node = root.get_node(prop.split(':', true, 2)[0])
+		var property: NodePath = prop.split(':', true, 2)[1]
+		if node == null || property.is_empty():
+			push_error("Property '%s' wasn't found on '%s'"%[state_properties[n], root.name])
+			continue
 
 ## Reads command properties to [param command].
 func capture_command(command: SnapCommand) -> void:
