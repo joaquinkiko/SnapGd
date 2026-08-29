@@ -4,7 +4,7 @@
 
 [![Godot](https://img.shields.io/badge/Godot-4.6%2B-478cbf?logo=godot-engine&logoColor=white)](https://godotengine.org/download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-WIP-orange)](#install)
+![Release](https://img.shields.io/github/v/release/joaquinkiko/SnapGd)
 
 SnapGd is a networking addon for handling smooth gameplay and synchronization for fast-paced multiplayer.
 
@@ -14,6 +14,7 @@ SnapGd is a networking addon for handling smooth gameplay and synchronization fo
 - **Client prediction and Server reconciliation** for responsive gameplay
 - **Interpolation** for smooth synchronization regardless of ping
 - **Lag compensation** for fast-paced gameplay
+- **Anit-cheat** systems to ensure fair-gameplay
 
 ## Install
  
@@ -31,11 +32,6 @@ Note that SnapGd is design with Server-Authoritative networking in mind, and not
 
 ## Roadmap
 
-- [ ]  Redundant sending of commands to improve accuracy of inputs
-- [ ]  Byte-encoding to save bandwidth
-- [ ]  Delta-compression
-- [ ]  Priority and interest management
-- [ ]  Command and event bundling to reduce packets
 - [ ]  Improved physics support
 
 ## License
