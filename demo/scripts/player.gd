@@ -85,10 +85,7 @@ func _gather_input(_command: SnapCommand) -> void:
 	# Check if should_jump is valid
 	should_jump = should_jump and _is_on_floor()
 
-func _simulate(command: SnapCommand) -> void:
-	# Grab delta from command
-	var delta: float = command.delta_time
-	
+func _simulate(delta: float) -> void:
 	# Update camera
 	camera_node.rotation.x = camera_pitch
 	rotation.y = camera_yaw

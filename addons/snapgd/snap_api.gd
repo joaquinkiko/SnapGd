@@ -260,7 +260,6 @@ func _on_client_tick(delta: float) -> void:
 	_command_sequence += 1
 	command.sequence = _command_sequence
 	command.tick = _current_tick
-	command.delta_time = delta
 	# Ensure input data is populated before capturing commands
 	for node in _owned_net_nodes():
 		node.sample_input.emit(command)
@@ -316,12 +315,11 @@ func _on_server_tick(delta: float) -> void:
 		else: # Reuse last command, or default to blank command
 			command = _previous_command.get(peer, SnapCommand.new())
 			command.tick = _current_tick
-			command.delta_time = delta
 			_previous_command[peer] = command
 		# Simulate this peer's world
 		for node in _peer_net_nodes(peer):
 			node.apply_command(command)
-			node.simulate_command.emit(command)
+			node.simulate_command.emit(_tick_delta)
 		# Update latest command processed for peer
 	# Run through events, ensuring only current or old ticks are simulated
 	var store_for_future_tick: Array[SnapEvent] = []
@@ -344,7 +342,6 @@ func _on_server_tick(delta: float) -> void:
 		var command := SnapCommand.new()
 		command.sequence = _command_sequence
 		command.tick = _current_tick
-		command.delta_time = _tick_delta
 		for node in _owned_net_nodes():
 			node.sample_input.emit(command)
 		for node in _owned_net_nodes():
@@ -366,7 +363,6 @@ func _on_offline_tick(delta: float) -> void:
 	var command := SnapCommand.new()
 	command.sequence = _command_sequence
 	command.tick = _current_tick
-	command.delta_time = _tick_delta
 	for node in _owned_net_nodes():
 		node.sample_input.emit(command)
 	for node in _owned_net_nodes():
@@ -540,7 +536,7 @@ func _process_relayed_event(event: SnapEvent) -> void:
 func _simulate_command(command: SnapCommand) -> void:
 	for node in _owned_net_nodes():
 		node.apply_command(command)
-		node.simulate_command.emit(command)
+		node.simulate_command.emit(_tick_delta)
 
 ## [NetNode]s owned by self.
 func _owned_net_nodes() -> Array[NetNode]:
