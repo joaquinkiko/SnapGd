@@ -766,11 +766,12 @@ func _request_time(client_send_time: int) -> void:
 		_tick_rate,
 		_usec_accumulator,
 		_current_tick,
+		is_paused,
 		client_send_time
 	)
 
 @rpc("authority", "reliable", "call_remote")
-func _receive_time(server_rate: int, accumulator: int, tick: int, client_send_time: int) -> void:
+func _receive_time(server_rate: int, accumulator: int, tick: int, paused: bool, client_send_time: int) -> void:
 	if multiplayer.is_server(): return # Only server -> peer
 	# Estimate RTT from original request send time
 	var rtt_usec := Time.get_ticks_usec() - client_send_time
@@ -780,6 +781,7 @@ func _receive_time(server_rate: int, accumulator: int, tick: int, client_send_ti
 	var total_usecs := (tick * _usecs_per_tick) + accumulator + maxi(0, rtt_usec / 2)
 	_current_tick = total_usecs / _usecs_per_tick
 	_usec_accumulator = total_usecs % _usecs_per_tick
+	is_paused = paused
 
 func set_paused(paused: bool) -> void:
 	# Clients cannot pause
@@ -1002,8 +1004,32 @@ func _observable_priority_factor(peer: int, observable: NetObservable) -> float:
 
 ## Called when disconnected from server
 func _clean_up_self() -> void:
-	pass
+	_pending_snapshot = null
+	_last_full_state = null
+	_last_full_state_tick = 0
+	_command_history.fill(null)
+	_state_history.fill(null)
+	_command_sequence = 0
+	render_offsets.clear()
+	upcoming_events.clear()
+	_pending_out_events.clear()
+	_event_sequence = 1
+	_last_processed_event_sequence = 0
+	_future_queued_events.clear()
+	_net_identifiables.clear()
+	_pending_path_ids.clear()
 
 ## Called when disconnected from peer
 func _clean_up_peer(peer: int) -> void:
-	pass
+	_pending_commands.erase(peer)
+	_previous_command.erase(peer)
+	_last_command_sequence.erase(peer)
+	_last_received_client_event_sequence.erase(peer)
+	_future_queued_events.erase(peer)
+	_last_acked_event_sequence.erase(peer)
+	_peer_confirmed_state.erase(peer)
+	_peer_pending_sends.erase(peer)
+	_peer_priority_state.erase(peer)
+	_peer_snapshot_byte_limits.erase(peer)
+	_current_observers.erase(peer)
+	_last_queued_command_sequence.erase(peer)
