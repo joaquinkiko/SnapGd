@@ -678,24 +678,25 @@ func _process_incoming_event(peer: int, event: SnapEvent) -> void:
 		return # Event overflow, need to flush current before accepting more
 	var net_event := _net_identifiables.get(event.net_id) as NetEvent
 	if net_event == null: return # Unresolved identifiable, ignore for now
-	if not net_event.has_permission(peer):
-		return
 	var expected_sequence: int = _last_received_client_event_sequence.get(peer, 0) + 1
 	if event.sequence == expected_sequence:
 		_last_received_client_event_sequence[peer] = event.sequence
 		expected_sequence += 1
-		event.sequence = _event_sequence
-		_event_sequence += 1
-		upcoming_events.append(event)
-		_pending_out_events[event.sequence] = event
+		if net_event != null && net_event.has_permission(peer):
+			event.sequence = _event_sequence
+			_event_sequence += 1
+			upcoming_events.append(event)
+			_pending_out_events[event.sequence] = event
 		while _future_queued_events.has(peer) and _future_queued_events[peer].has(expected_sequence):
 			_last_received_client_event_sequence[peer] = expected_sequence
 			event = _future_queued_events[peer][expected_sequence]
 			_future_queued_events[peer].erase(expected_sequence)
-			event.sequence = _event_sequence
-			_event_sequence += 1
-			upcoming_events.append(event)
-			_pending_out_events[_event_sequence] = event
+			net_event = _net_identifiables.get(event.net_id) as NetEvent
+			if net_event != null && net_event.has_permission(peer):
+				event.sequence = _event_sequence
+				_event_sequence += 1
+				upcoming_events.append(event)
+				_pending_out_events[_event_sequence] = event
 			expected_sequence += 1
 	elif event.sequence < expected_sequence:
 		return # Outdated sequence, ignore
