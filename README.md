@@ -19,8 +19,6 @@ SnapGd is a networking addon for handling smooth gameplay and synchronization fo
 ## Install
  
 After adding the latest [Release](../../releases/latest) to your project, enable the addon in your project settings.
- 
-> **Note:** SnapGd is still in early development (WIP). APIs and features may change before a stable release.
 
 ## Usage
 
